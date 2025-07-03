@@ -11,7 +11,7 @@ Description: Comprehensive toolkit for analyzing ATP regulation, mitochondrial
     for Visium HD brain tissue analysis with seamless Seurat integration.
     Provides specialized functions for metabolic pathway scoring, spatial 
     gradient detection, and publication-ready visualization.
-License: Artistic-2.0
+License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)

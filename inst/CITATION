@@ -1,0 +1,16 @@
+citHeader("To cite SpatialMetabolics in publications use:")
+
+citEntry(
+  entry    = "Manual",
+  title    = "SpatialMetabolics: Spatial Metabolic Analysis for Visium HD Brain Transcriptomics",
+  author   = person("Eric", "Prince"),
+  year     = "2025",
+  note     = "R package version 1.0.0",
+  url      = "https://github.com/lericnet/SpatialMetabolics",
+  textVersion = paste(
+    "Your Name (2025).",
+    "SpatialMetabolics: Spatial Metabolic Analysis for Visium HD Brain Transcriptomics.",
+    "R package version 1.0.0.",
+    "https://github.com/lericnet/SpatialMetabolics"
+  )
+)

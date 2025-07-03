@@ -1,0 +1,122 @@
+url: https://yourusername.github.io/SpatialMetabolics/
+
+template:
+  bootstrap: 5
+  bslib:
+    primary: "#0054AD"
+    border-radius: 0.5rem
+    btn-border-radius: 0.25rem
+
+navbar:
+  title: "SpatialMetabolics"
+  left:
+    - text: "Get Started"
+      href: articles/SpatialMetabolics.html
+    - text: "Reference"
+      href: reference/index.html
+    - text: "Articles"
+      menu:
+        - text: "Metabolic Analysis Workflow"
+          href: articles/SpatialMetabolics.html
+        - text: "Understanding Metabolic Pathways"
+          href: articles/metabolic_pathways.html
+    - text: "News"
+      href: news/index.html
+  right:
+    - icon: fab fa-github
+      href: https://github.com/yourusername/SpatialMetabolics
+    - icon: fab fa-twitter
+      href: https://twitter.com/yourusername
+
+home:
+  title: "SpatialMetabolics"
+  description: "Spatial Metabolic Analysis for Visium HD Brain Transcriptomics"
+
+  links:
+  - text: Report a bug
+    href: https://github.com/yourusername/SpatialMetabolics/issues
+  - text: Ask a question
+    href: https://github.com/yourusername/SpatialMetabolics/discussions
+
+reference:
+- title: "Package overview"
+  desc: "Overview of SpatialMetabolics"
+  contents:
+  - SpatialMetabolics-package
+
+- title: "Class and methods"
+  desc: "S4 class definition and methods"
+  contents:
+  - SpatialMetabolic-class
+  - starts_with("metabolic")
+  - starts_with("spatial")
+  - starts_with("comparison")
+  - starts_with("analysis")
+
+- title: "Data import and creation"
+  desc: "Functions for creating SpatialMetabolic objects"
+  contents:
+  - createSpatialMetabolic
+  - spatialExperimentToMetabolic
+
+- title: "Metabolic pathways"
+  desc: "Functions for metabolic pathway gene sets"
+  contents:
+  - starts_with("get")
+  - listMetabolicPathways
+  - getAllMetabolicPathways
+
+- title: "Analysis functions"
+  desc: "Core analysis functions"
+  contents:
+  - calculateMetabolicScores
+  - detectMetabolicGradients
+  - compareMetabolicStates
+  - findMetabolicNeighborhoods
+  - calculatePathwayEnrichment
+  - pathwayEnrichment
+
+- title: "Visualization"
+  desc: "Plotting functions"
+  contents:
+  - starts_with("plot")
+  - animateSpatialMetabolics
+  - createMetabolicReport
+
+- title: "Data processing"
+  desc: "Preprocessing and utility functions"
+  contents:
+  - normalizeSpatial
+  - preprocessSpatial
+  - findVariableFeatures
+  - runPCA
+  - runUMAP
+  - calculateQCMetrics
+
+- title: "Data manipulation"
+  desc: "Functions for manipulating SpatialMetabolic objects"
+  contents:
+  - subsetSpatial
+  - mergeSpatial
+  - toSeurat
+  - saveSpatialMetabolic
+  - loadSpatialMetabolic
+
+articles:
+- title: "Get started"
+  navbar: ~
+  contents:
+  - SpatialMetabolics
+
+- title: "Advanced topics"
+  contents:
+  - metabolic_pathways
+  - troubleshooting
+
+footer:
+  structure:
+    left: developed_by
+    right: built_with
+  components:
+    developed_by: "Developed by Your Name"
+    built_with: "Built with [pkgdown](https://pkgdown.r-lib.org)"

@@ -1,4 +1,65 @@
+# R specific
 .Rproj.user
 .Rhistory
 .RData
 .Ruserdata
+*.Rproj
+
+# Package building
+/*.tar.gz
+/*.Rcheck/
+.Rbuildignore
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# IDE specific
+.vscode/
+.idea/
+
+# Compiled files
+src/*.o
+src/*.so
+src/*.dll
+
+# Temporary files
+*~
+*.swp
+*.swo
+\#*\#
+.\#*
+
+# Output directories
+/results/
+/output/
+/figures/
+/cache/
+
+# Large data files
+*.h5
+*.h5ad
+*.rds
+*.RData
+!inst/extdata/*.rds
+
+# Documentation
+/docs/
+/pkgdown/
+inst/doc
+
+# Testing
+/tests/testthat/Rplots.pdf
+/tests/testthat/.Rapp.history
+
+# Logs
+*.log
+
+# Local configuration
+.Rprofile
+.Renviron
+
+# Manuscript/analysis
+/manuscript/
+/analysis/cache/
+/analysis/figures/

@@ -1,0 +1,621 @@
+---
+title: "Analyzing Spatial Metabolic States in Brain Tissue with SpatialMetabolics"
+author: "Eric Prince"
+date: "`r Sys.Date()`"
+output: 
+  BiocStyle::html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
+vignette: >
+  %\VignetteIndexEntry{Analyzing Spatial Metabolic States in Brain Tissue}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+    collapse = TRUE,
+    comment = "#>",
+    fig.width = 7,
+    fig.height = 5,
+    warning = FALSE,
+    message = FALSE
+)
+```
+
+# Introduction
+
+SpatialMetabolics provides a comprehensive framework for analyzing metabolic states in spatial transcriptomics data, with a focus on brain tissue energetics. This vignette demonstrates how to:
+
+1. Import and preprocess Visium HD spatial transcriptomics data
+2. Calculate metabolic pathway activity scores
+3. Identify spatial metabolic gradients
+4. Compare metabolic states between conditions
+5. Create publication-ready visualizations
+
+## Background: Brain Energy Metabolism
+
+The brain consumes ~20% of the body's oxygen despite being only ~2% of body weight. This high metabolic demand makes brain tissue particularly vulnerable to energetic dysfunction. Key metabolic pathways include:
+
+- **Oxidative Phosphorylation (OXPHOS)**: Primary ATP production pathway
+- **Glycolysis**: Rapid ATP production and metabolic flexibility
+- **Mitochondrial Dynamics**: Balance of fission/fusion maintaining healthy mitochondria
+- **ATP Consumption**: Major consumers include ion pumps (Na+/K+-ATPase) and protein synthesis
+
+Small vessel disease (SVD) disrupts oxygen delivery, leading to metabolic adaptations that can be detected through spatial transcriptomics.
+
+# Installation
+
+```{r install, eval=FALSE}
+# Install Bioconductor dependencies
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("SpatialMetabolics")
+
+# Or install from GitHub
+devtools::install_github("lericnet/SpatialMetabolics")
+```
+
+# Quick Start
+
+```{r libraries}
+library(SpatialMetabolics)
+library(SpatialExperiment)
+library(Seurat)
+library(ggplot2)
+library(patchwork)
+library(viridis)
+```
+
+## Loading Visium HD Data
+
+For this example, we'll analyze 4 murine brain samples: 2 wild-type (WT) and 2 with small vessel disease (SVD) phenotype.
+
+```{r load_data, eval=FALSE}
+# Load Visium HD data at 8μm resolution
+samples <- list(
+    WT1 = "data/WT_sample1/",
+    WT2 = "data/WT_sample2/",
+    SVD1 = "data/SVD_sample1/",
+    SVD2 = "data/SVD_sample2/"
+)
+
+# Load each sample as Seurat object
+seurat_list <- lapply(names(samples), function(s) {
+    obj <- Load10X_Spatial(
+        data.dir = samples[[s]],
+        filename = "filtered_feature_bc_matrix.h5",
+        bin.size = 8  # 8μm bins for Visium HD
+    )
+    
+    # Add metadata
+    obj$sample <- s
+    obj$condition <- ifelse(grepl("WT", s), "WT", "SVD")
+    
+    # Basic QC filtering
+    obj[["percent.mt"]] <- PercentageFeatureSet(obj, pattern = "^mt-")
+    obj <- subset(obj, subset = nFeature_RNA > 200 & percent.mt < 20)
+    
+    return(obj)
+})
+```
+
+For demonstration, we'll create example data:
+
+```{r create_example}
+# Create example data
+set.seed(123)
+n_genes <- 500
+n_spots_per_sample <- 1000
+
+# Simulate count data
+create_sample_data <- function(condition, sample_id) {
+    # Base expression
+    base_expr <- matrix(
+        rpois(n_genes * n_spots_per_sample, lambda = 5),
+        nrow = n_genes,
+        ncol = n_spots_per_sample
+    )
+    
+    # Add condition-specific effects
+    if (condition == "SVD") {
+        # Reduce OXPHOS genes
+        oxphos_idx <- 1:50
+        base_expr[oxphos_idx, ] <- base_expr[oxphos_idx, ] * 0.7
+        
+        # Increase glycolysis genes
+        glycolysis_idx <- 51:70
+        base_expr[glycolysis_idx, ] <- base_expr[glycolysis_idx, ] * 1.5
+    }
+    
+    # Gene names (including some real metabolic genes)
+    gene_names <- c(
+        getOXPHOSGenes("mouse")[1:50],
+        getGlycolysisGenes("mouse")[1:20],
+        paste0("Gene", 71:n_genes)
+    )
+    
+    rownames(base_expr) <- gene_names[1:n_genes]
+    colnames(base_expr) <- paste0(sample_id, "_", 1:n_spots_per_sample)
+    
+    # Create metadata
+    meta <- data.frame(
+        sample_id = sample_id,
+        condition = condition,
+        row.names = colnames(base_expr)
+    )
+    
+    # Create spatial coordinates (grid layout)
+    coords <- expand.grid(
+        x = 1:40,
+        y = 1:25
+    )[1:n_spots_per_sample, ]
+    
+    return(list(counts = base_expr, meta = meta, coords = coords))
+}
+
+# Create data for each sample
+sample_data <- list(
+    WT1 = create_sample_data("WT", "WT1"),
+    WT2 = create_sample_data("WT", "WT2"),
+    SVD1 = create_sample_data("SVD", "SVD1"),
+    SVD2 = create_sample_data("SVD", "SVD2")
+)
+
+# Combine into SpatialExperiment
+all_counts <- do.call(cbind, lapply(sample_data, "[[", "counts"))
+all_meta <- do.call(rbind, lapply(sample_data, "[[", "meta"))
+all_coords <- do.call(rbind, lapply(sample_data, "[[", "coords"))
+
+spe <- SpatialExperiment(
+    assays = list(counts = all_counts),
+    colData = all_meta,
+    spatialCoords = as.matrix(all_coords)
+)
+
+# Convert to SpatialMetabolic
+spm <- as(spe, "SpatialMetabolic")
+comparisonGroups(spm) <- factor(all_meta$condition)
+```
+
+# Data Preprocessing
+
+## Quality Control
+
+First, we calculate QC metrics to assess data quality:
+
+```{r qc}
+# Calculate QC metrics
+spm <- calculateQCMetrics(spm)
+
+# Visualize QC metrics
+qc_data <- as.data.frame(colData(spm))
+
+p_qc <- ggplot(qc_data, aes(x = log10_nCount_RNA, y = log10_nFeature_RNA, 
+                             color = percent_mt)) +
+    geom_point(alpha = 0.6, size = 0.5) +
+    facet_wrap(~ sample_id) +
+    scale_color_viridis_c() +
+    theme_minimal() +
+    labs(title = "QC Metrics by Sample",
+         x = "log10(UMI count)",
+         y = "log10(Gene count)",
+         color = "% Mito")
+
+print(p_qc)
+```
+
+## Normalization
+
+We use log-normalization by default, but other methods are available:
+
+```{r normalize}
+# Normalize data
+spm <- normalizeSpatial(spm, method = "logNormalize")
+
+# Find variable features
+spm <- findVariableFeatures(spm, n_features = 2000)
+
+# Run PCA
+spm <- runPCA(spm, n_components = 30)
+
+# Check variance explained
+var_explained <- metadata(spm)$PCA$var_explained[1:10]
+plot(1:10, cumsum(var_explained), 
+     type = "b", 
+     xlab = "PC", 
+     ylab = "Cumulative variance explained",
+     main = "PCA Variance Explained")
+```
+
+# Metabolic Pathway Analysis
+
+## Available Pathways
+
+SpatialMetabolics includes curated gene sets for major metabolic pathways:
+
+```{r pathways}
+# List available pathways
+pathway_info <- listMetabolicPathways("mouse")
+print(pathway_info)
+
+# Get all pathway gene sets
+pathways <- getAllMetabolicPathways("mouse")
+
+# Check coverage in our data
+coverage <- sapply(pathways, function(genes) {
+    present <- sum(genes %in% rownames(spm))
+    total <- length(genes)
+    paste0(present, "/", total, " (", round(present/total*100, 1), "%)")
+})
+
+print(data.frame(
+    Pathway = names(coverage),
+    Coverage = coverage
+))
+```
+
+## Calculating Metabolic Scores
+
+We calculate pathway activity scores using the Seurat method, which compares pathway expression to control gene sets:
+
+```{r scores}
+# Calculate metabolic scores for all pathways
+spm <- calculateMetabolicScores(
+    spm,
+    pathways = pathways,
+    method = "seurat",
+    scale = TRUE,
+    nbin = 24
+)
+
+# View scores
+metabolicScores(spm)[, 1:5]
+```
+
+## Interpreting Metabolic Scores
+
+Higher scores indicate increased pathway activity. Let's examine the distribution:
+
+```{r score_dist}
+# Reshape scores for plotting
+scores_long <- reshape2::melt(metabolicScores(spm))
+colnames(scores_long) <- c("Pathway", "Cell", "Score")
+scores_long$Condition <- rep(colData(spm)$condition, 
+                             each = nrow(metabolicScores(spm)))
+
+# Plot distribution
+ggplot(scores_long, aes(x = Score, fill = Condition)) +
+    geom_density(alpha = 0.7) +
+    facet_wrap(~ Pathway, scales = "free_y") +
+    theme_minimal() +
+    scale_fill_manual(values = c("WT" = "blue", "SVD" = "red")) +
+    labs(title = "Metabolic Score Distributions",
+         x = "Pathway Activity Score",
+         y = "Density")
+```
+
+# Spatial Analysis
+
+## Visualizing Spatial Patterns
+
+```{r spatial_vis, fig.width=10, fig.height=6}
+# Plot OXPHOS activity
+p_oxphos <- plotSpatialMetabolicScore(
+    spm,
+    pathway = "OXPHOS",
+    samples = c("WT1", "SVD1"),
+    ncol = 2,
+    color_scale = "plasma"
+) + labs(title = "OXPHOS Activity")
+
+# Plot Glycolysis activity
+p_glycolysis <- plotSpatialMetabolicScore(
+    spm,
+    pathway = "Glycolysis",
+    samples = c("WT1", "SVD1"),
+    ncol = 2,
+    color_scale = "viridis"
+) + labs(title = "Glycolysis Activity")
+
+p_oxphos / p_glycolysis
+```
+
+## Detecting Spatial Gradients
+
+We use Moran's I to identify metabolic pathways with non-random spatial patterns:
+
+```{r gradients}
+# Detect spatial gradients
+spm <- detectMetabolicGradients(
+    spm,
+    method = "moran",
+    n_neighbors = 6,
+    permutations = 99  # Use more for real analysis
+)
+
+# View results
+gradient_results <- analysisResults(spm)[["spatial_gradients_scores"]]
+print(head(gradient_results))
+
+# Plot top spatial patterns
+plotSpatialGradients(spm, top_n = 6)
+```
+
+### Interpreting Moran's I
+
+- **Moran's I > 0**: Positive spatial autocorrelation (clustering)
+- **Moran's I ≈ 0**: Random spatial pattern
+- **Moran's I < 0**: Negative spatial autocorrelation (dispersion)
+
+# Differential Metabolic Analysis
+
+## Comparing Conditions
+
+```{r differential}
+# Compare metabolic states between WT and SVD
+de_results <- compareMetabolicStates(
+    spm,
+    condition = "condition",
+    ref_group = "WT",
+    test_group = "SVD",
+    test_type = "wilcox"
+)
+
+print(de_results)
+
+# Visualize results
+p_compare <- plotMetabolicComparison(
+    spm,
+    pathway = "OXPHOS",
+    group_by = "condition",
+    plot_type = "violin"
+) + labs(title = "OXPHOS Activity: WT vs SVD")
+
+print(p_compare)
+```
+
+## Biological Interpretation
+
+In our example, we observe:
+
+1. **Reduced OXPHOS in SVD**: Consistent with hypoxia-induced mitochondrial dysfunction
+2. **Increased Glycolysis**: Compensatory metabolic shift (Warburg-like effect)
+3. **Spatial heterogeneity**: Metabolic changes are not uniform across tissue
+
+## Gene-Level Analysis
+
+```{r gene_analysis}
+# Compare individual genes
+gene_de <- compareMetabolicStates(
+    spm,
+    condition = "condition",
+    ref_group = "WT",
+    test_group = "SVD",
+    features = c(pathways$OXPHOS[1:20], pathways$Glycolysis[1:10]),
+    test_type = "wilcox"
+)
+
+# Volcano plot
+plotVolcano(
+    gene_de,
+    pval_cutoff = 0.05,
+    fc_cutoff = 0.5,
+    label_top = 10
+) + labs(title = "Differential Expression: Metabolic Genes")
+```
+
+# Advanced Analysis
+
+## Metabolic Neighborhoods
+
+Identify spatially coherent regions with distinct metabolic profiles:
+
+```{r neighborhoods}
+# Find metabolic neighborhoods
+spm <- findMetabolicNeighborhoods(
+    spm,
+    k = 5,
+    method = "kmeans",
+    use_pca = TRUE,
+    n_pcs = 10
+)
+
+# Visualize neighborhoods
+neighborhood_data <- data.frame(
+    x = spatialCoords(spm)[, 1],
+    y = spatialCoords(spm)[, 2],
+    neighborhood = colData(spm)$metabolic_neighborhood,
+    sample = colData(spm)$sample_id
+)
+
+ggplot(neighborhood_data[neighborhood_data$sample %in% c("WT1", "SVD1"), ], 
+       aes(x = x, y = y, color = neighborhood)) +
+    geom_point(size = 1) +
+    facet_wrap(~ sample) +
+    scale_color_viridis_d() +
+    coord_fixed() +
+    theme_minimal() +
+    labs(title = "Metabolic Neighborhoods")
+```
+
+## Pathway Enrichment
+
+Test for enrichment in differentially expressed genes:
+
+```{r enrichment}
+# Get all gene-level results
+all_gene_de <- compareMetabolicStates(
+    spm,
+    features = rownames(spm),
+    test_type = "wilcox",
+    verbose = FALSE
+)
+
+# Run enrichment analysis
+enrichment <- pathwayEnrichment(
+    all_gene_de,
+    pathways = pathways,
+    pvalue_cutoff = 0.05,
+    log2fc_cutoff = 0.25
+)
+
+print(enrichment[enrichment$adj_pvalue < 0.1, ])
+```
+
+# Creating Publication Figures
+
+## Multi-Panel Figure
+
+```{r publication_fig, fig.width=12, fig.height=10}
+# Panel A: Spatial OXPHOS
+p_a <- plotSpatialMetabolicScore(
+    spm,
+    pathway = "OXPHOS",
+    samples = c("WT1", "SVD1"),
+    ncol = 2,
+    color_scale = "plasma"
+) + labs(title = "OXPHOS Activity") +
+    theme(plot.title = element_text(size = 14, face = "bold"))
+
+# Panel B: Metabolic comparison
+p_b <- plotMetabolicSummary(
+    spm,
+    group_by = "condition",
+    plot_type = "box"
+) + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Panel C: Spatial gradients
+p_c <- plotSpatialGradients(spm, top_n = 8)
+
+# Panel D: Volcano plot
+p_d <- plotVolcano(de_results, label_top = 5) +
+    labs(title = "Pathway Differential Activity")
+
+# Combine
+figure <- (p_a | p_b) / (p_c | p_d) +
+    plot_annotation(
+        tag_levels = 'A',
+        title = "Spatial Metabolic Dysregulation in Small Vessel Disease",
+        subtitle = "Visium HD analysis of murine brain tissue",
+        theme = theme(
+            plot.title = element_text(size = 16, face = "bold"),
+            plot.subtitle = element_text(size = 12)
+        )
+    )
+
+print(figure)
+```
+
+## Saving High-Resolution Figures
+
+```{r save_fig, eval=FALSE}
+# Save as TIFF for journals
+ggsave(
+    "metabolic_analysis_figure.tiff",
+    plot = figure,
+    width = 183,  # Two-column width in mm
+    height = 200,
+    units = "mm",
+    dpi = 300,
+    compression = "lzw"
+)
+
+# Save as PDF for manuscripts
+ggsave(
+    "metabolic_analysis_figure.pdf",
+    plot = figure,
+    width = 183,
+    height = 200,
+    units = "mm"
+)
+```
+
+# Best Practices
+
+## 1. Quality Control
+- Filter spots with < 200 genes
+- Remove spots with > 20% mitochondrial reads
+- Check for spatial artifacts or edge effects
+
+## 2. Normalization
+- Use SCTransform for datasets with strong technical variation
+- Consider batch correction for multi-sample comparisons
+
+## 3. Pathway Analysis
+- Verify gene coverage before analysis
+- Use multiple scoring methods for validation
+- Consider tissue-specific pathway modifications
+
+## 4. Statistical Testing
+- Account for multiple testing (FDR correction)
+- Use permutation tests for small sample sizes
+- Consider spatial autocorrelation in differential analysis
+
+## 5. Visualization
+- Use colorblind-friendly palettes
+- Include scale bars for spatial plots
+- Show individual data points when possible
+
+# Troubleshooting
+
+## Common Issues
+
+### Low Pathway Coverage
+```{r troubleshoot_coverage}
+# Check which genes are missing
+missing_oxphos <- setdiff(pathways$OXPHOS, rownames(spm))
+print(paste("Missing OXPHOS genes:", length(missing_oxphos)))
+
+# Use only present genes
+present_pathways <- lapply(pathways, function(genes) {
+    intersect(genes, rownames(spm))
+})
+```
+
+### Memory Issues with Large Datasets
+```{r troubleshoot_memory, eval=FALSE}
+# Process samples separately
+results_list <- lapply(unique(colData(spm)$sample_id), function(s) {
+    spm_sub <- subsetSpatial(spm, samples = s)
+    calculateMetabolicScores(spm_sub)
+})
+
+# Use parallel processing
+library(BiocParallel)
+register(MulticoreParam(workers = 4))
+```
+
+### Batch Effects
+```{r troubleshoot_batch, eval=FALSE}
+# Check for batch effects
+plotPCA(spm, color_by = "sample_id")
+
+# Consider integration methods
+# Convert to Seurat for integration
+seurat_obj <- toSeurat(spm)
+# ... perform integration ...
+# Convert back
+spm_integrated <- seuratToSpatialMetabolic(seurat_obj)
+```
+
+# Session Info
+
+```{r session}
+sessionInfo()
+```
+
+# References
+
+1. **Oxidative Phosphorylation**: Vafai SB & Mootha VK (2012). Mitochondrial disorders as windows into an ancient organelle. Nature 491, 374–383.
+
+2. **Brain Metabolism**: Magistretti PJ & Allaman I (2015). A cellular perspective on brain energy metabolism and functional imaging. Neuron 86, 883–901.
+
+3. **Small Vessel Disease**: Pantoni L (2010). Cerebral small vessel disease: from pathogenesis and clinical characteristics to therapeutic challenges. Lancet Neurol 9, 689–701.
+
+4. **Spatial Transcriptomics**: Ståhl PL et al. (2016). Visualization and analysis of gene expression in tissue sections by spatial transcriptomics. Science 353, 78–82.
+
+5. **Metabolic Analysis Methods**: Xiao Z et al. (2021). Metabolic landscape of the tumor microenvironment at single cell resolution. Nat Commun 12, 3763.
