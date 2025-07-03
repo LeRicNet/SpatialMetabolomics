@@ -225,10 +225,18 @@ plotSampleCorrelation <- function(object,
   # Calculate correlation
   cor_mat <- cor(data_mat, method = method)
 
-  # Get sample annotations
-  sample_meta <- unique(colData(object)[, c("sample_id", "condition")])
+  # Get sample annotations - FIX for S4 compatibility
+  sample_meta <- unique(as.data.frame(colData(object))[, c("sample_id", "condition"), drop = FALSE])
   rownames(sample_meta) <- sample_meta$sample_id
-  sample_meta <- sample_meta[colnames(cor_mat), , drop = FALSE]
+  sample_meta <- sample_meta[colnames(cor_mat), "condition", drop = FALSE]
+
+  # Ensure it's a proper data.frame
+  if (!is.data.frame(sample_meta)) {
+    sample_meta <- data.frame(
+      condition = sample_meta,
+      row.names = colnames(cor_mat)
+    )
+  }
 
   # Create heatmap
   if (requireNamespace("pheatmap", quietly = TRUE)) {
@@ -238,32 +246,33 @@ plotSampleCorrelation <- function(object,
       condition = c(WT = "blue", SVD = "red", Disease = "red")
     )
 
-    p <- pheatmap::pheatmap(
-      cor_mat,
-      annotation_col = sample_meta[, "condition", drop = FALSE],
-      annotation_colors = ann_colors,
-      cluster_rows = cluster,
-      cluster_cols = cluster,
-      color = colorRampPalette(c("blue", "white", "red"))(100),
-      breaks = seq(-1, 1, length.out = 101),
-      main = "Sample Correlation",
-      display_numbers = TRUE,
-      number_format = "%.2f"
-    )
-
-  } else {
-    # ggplot2 fallback
-    cor_long <- reshape2::melt(cor_mat)
-    colnames(cor_long) <- c("Sample1", "Sample2", "Correlation")
-
-    p <- ggplot(cor_long, aes(x = Sample1, y = Sample2, fill = Correlation)) +
-      geom_tile() +
-      geom_text(aes(label = sprintf("%.2f", Correlation)), size = 3) +
-      scale_fill_gradient2(low = "blue", mid = "white", high = "red",
-                           midpoint = 0, limits = c(-1, 1)) +
-      theme_minimal() +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-      labs(title = "Sample Correlation Matrix")
+    # Only use pheatmap if we have valid annotations
+    if (nrow(sample_meta) > 0 && ncol(sample_meta) > 0) {
+      p <- pheatmap::pheatmap(
+        cor_mat,
+        annotation_col = sample_meta,
+        annotation_colors = ann_colors,
+        cluster_rows = cluster,
+        cluster_cols = cluster,
+        color = colorRampPalette(c("blue", "white", "red"))(100),
+        breaks = seq(-1, 1, length.out = 101),
+        main = "Sample Correlation",
+        display_numbers = TRUE,
+        number_format = "%.2f"
+      )
+    } else {
+      # Fallback without annotations
+      p <- pheatmap::pheatmap(
+        cor_mat,
+        cluster_rows = cluster,
+        cluster_cols = cluster,
+        color = colorRampPalette(c("blue", "white", "red"))(100),
+        breaks = seq(-1, 1, length.out = 101),
+        main = "Sample Correlation",
+        display_numbers = TRUE,
+        number_format = "%.2f"
+      )
+    }
   }
 
   return(p)

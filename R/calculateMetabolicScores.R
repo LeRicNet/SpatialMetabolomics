@@ -41,12 +41,15 @@ setMethod("calculateMetabolicScores", "SpatialMetabolic",
                    nbin = 24,
                    ctrl = 100,
                    seed = 42,
+                   verbose = TRUE,  # ADD THIS PARAMETER
                    BPPARAM = SerialParam()) {
 
             # Check if data is normalized
             if (all(logcounts(object) == 0)) {
-              message("No normalized data found. Running log normalization...")
-              object <- normalizeSpatial(object)
+              if (verbose) {
+                message("No normalized data found. Running log normalization...")
+              }
+              object <- normalizeSpatial(object, verbose = verbose)
             }
 
             # Get pathway gene sets
@@ -59,7 +62,7 @@ setMethod("calculateMetabolicScores", "SpatialMetabolic",
             }
 
             # Filter pathways to genes present in data
-            pathway_list <- .filterPathwayGenes(pathway_list, object)
+            pathway_list <- .filterPathwayGenes(pathway_list, object, verbose = verbose)
 
             if (length(pathway_list) == 0) {
               stop("No valid pathways after filtering for present genes")
@@ -69,7 +72,9 @@ setMethod("calculateMetabolicScores", "SpatialMetabolic",
             metabolicPathways(object) <- pathway_list
 
             # Calculate scores based on method
-            message("Calculating metabolic scores using ", method, " method...")
+            if (verbose) {
+              message("Calculating metabolic scores using ", method, " method...")
+            }
 
             set.seed(seed)
 
@@ -107,7 +112,9 @@ setMethod("calculateMetabolicScores", "SpatialMetabolic",
 
             colData(object) <- cbind(colData(object), score_df)
 
-            message("Calculated scores for ", ncol(scores), " pathways")
+            if (verbose) {
+              message("Calculated scores for ", ncol(scores), " pathways")
+            }
 
             return(object)
           })
@@ -149,7 +156,7 @@ setMethod("calculateMetabolicScores", "SpatialMetabolic",
 
 #' Filter pathway genes to those present in data
 #' @keywords internal
-.filterPathwayGenes <- function(pathway_list, object) {
+.filterPathwayGenes <- function(pathway_list, object, verbose = TRUE) {
   gene_universe <- rownames(object)
 
   filtered_list <- list()
@@ -160,11 +167,15 @@ setMethod("calculateMetabolicScores", "SpatialMetabolic",
     if (length(genes_present) >= 3) {  # Minimum 3 genes per pathway
       filtered_list[[pathway_name]] <- genes_present
       coverage <- round(length(genes_present) / length(genes) * 100, 1)
-      message("  ", pathway_name, ": ", length(genes_present), "/",
-              length(genes), " genes (", coverage, "% coverage)")
+      if (verbose) {
+        message("  ", pathway_name, ": ", length(genes_present), "/",
+                length(genes), " genes (", coverage, "% coverage)")
+      }
     } else {
-      warning("Pathway ", pathway_name, " has too few genes (",
-              length(genes_present), ") and will be skipped")
+      if (verbose) {
+        warning("Pathway ", pathway_name, " has too few genes (",
+                length(genes_present), ") and will be skipped")
+      }
     }
   }
 

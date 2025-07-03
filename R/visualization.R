@@ -79,7 +79,7 @@ plotSpatialMetabolicScore <- function(object,
   # Create plot
   p <- ggplot(plot_data, aes(x = x, y = y, color = score)) +
     geom_point(size = point_size, shape = 16) +
-    facet_wrap(~ facet_label, ncol = ncol, scales = "free") +
+    facet_wrap(~ facet_label, ncol = ncol) +
     coord_fixed() +
     theme_minimal() +
     theme(
@@ -372,15 +372,22 @@ plotMetabolicHeatmap <- function(object,
     mat[is.na(mat)] <- 0
   }
 
-  # Get annotation
+  # Get annotation - FIX for S4 compatibility
   if (ncol(mat) == length(unique(colData(object)$sample_id))) {
     # Per-sample data
-    sample_info <- unique(colData(object)[, c("sample_id", group_by), drop = FALSE])
+    sample_info <- unique(as.data.frame(colData(object))[, c("sample_id", group_by), drop = FALSE])
     rownames(sample_info) <- sample_info$sample_id
     col_anno <- sample_info[colnames(mat), group_by, drop = FALSE]
   } else {
-    # Per-spot data
-    col_anno <- colData(object)[, group_by, drop = FALSE]
+    # Per-spot data - convert S4 to data.frame first
+    col_data_df <- as.data.frame(colData(object))
+    col_anno <- col_data_df[, group_by, drop = FALSE]
+  }
+
+  # Convert col_anno to data.frame if it isn't already
+  if (!is.data.frame(col_anno)) {
+    col_anno <- as.data.frame(col_anno)
+    colnames(col_anno) <- group_by
   }
 
   if (use_pheatmap) {
@@ -635,7 +642,8 @@ plotMetabolicSummary <- function(object,
       pathways <- unique(scores_long$Pathway)
       groups <- unique(scores_long$Group)
 
-      for (i, pathway in enumerate(pathways)) {
+      for (i in seq_along(pathways)) {  # FIXED: Proper R syntax
+        pathway <- pathways[i]
         pathway_data <- scores_long[scores_long$Pathway == pathway, ]
 
         p_val <- wilcox.test(

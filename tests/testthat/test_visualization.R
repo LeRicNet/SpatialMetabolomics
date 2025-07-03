@@ -1,18 +1,12 @@
 # Test visualization functions
 
-# Helper to check if plot is valid ggplot
-expect_ggplot <- function(p) {
-  expect_s3_class(p, "ggplot")
-  expect_true(length(p$layers) > 0)
-  expect_true(!is.null(p$data) || !is.null(p$layers[[1]]$data))
-}
-
 test_that("Spatial metabolic score plotting works", {
   # Create test data with scores
   spm <- create_test_data()
   spm <- normalizeSpatial(spm, verbose = FALSE)
-  pathways <- list(TestPathway = paste0("Gene", 1:10))
-  spm <- calculateMetabolicScores(spm, pathways = pathways, verbose = FALSE)
+  # Use genes that actually exist in the test data
+  pathways <- list(TestPathway = c("Ndufa1", "Ndufa2", "Atp5a1"))
+  spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   # Basic plot
   p <- plotSpatialMetabolicScore(spm, pathway = "TestPathway")
@@ -38,8 +32,8 @@ test_that("Spatial metabolic score plotting works", {
 test_that("Metabolic comparison plots work", {
   spm <- create_test_data()
   spm <- normalizeSpatial(spm, verbose = FALSE)
-  pathways <- list(TestPathway = paste0("Gene", 1:10))
-  spm <- calculateMetabolicScores(spm, pathways = pathways, verbose = FALSE)
+  pathways <- list(TestPathway = c("Ndufa1", "Ndufa2", "Atp5a1"))
+  spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   # Violin plot
   p_violin <- plotMetabolicComparison(
@@ -70,11 +64,11 @@ test_that("Metabolic comparison plots work", {
 test_that("Spatial gradient plotting works", {
   spm <- create_test_data()
   spm <- normalizeSpatial(spm, verbose = FALSE)
-  pathways <- list(TestPathway = paste0("Gene", 1:10))
-  spm <- calculateMetabolicScores(spm, pathways = pathways, verbose = FALSE)
+  pathways <- list(TestPathway = c("Ndufa1", "Ndufa2", "Atp5a1"))
+  spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   # Detect gradients first
-  spm <- detectMetabolicGradients(spm, method = "moran", permutations = 0, verbose = FALSE)
+  spm <- detectMetabolicGradients(spm, method = "moran", permutations = 0)
 
   # Plot gradients
   p <- plotSpatialGradients(spm, top_n = 5)
@@ -118,10 +112,10 @@ test_that("Heatmap plotting works", {
   spm <- create_test_data()
   spm <- normalizeSpatial(spm, verbose = FALSE)
   pathways <- list(
-    Pathway1 = paste0("Gene", 1:10),
-    Pathway2 = paste0("Gene", 11:20)
+    Pathway1 = c("Ndufa1", "Ndufa2", "Atp5a1"),
+    Pathway2 = c("Hk1", "Hk2", "Pfkl")
   )
-  spm <- calculateMetabolicScores(spm, pathways = pathways, verbose = FALSE)
+  spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   # Test with metabolic scores
   if (requireNamespace("pheatmap", quietly = TRUE)) {
@@ -136,7 +130,7 @@ test_that("Heatmap plotting works", {
   # Test with specific features
   p2 <- plotMetabolicHeatmap(
     spm,
-    features = paste0("Gene", 1:20),
+    features = c("Ndufa1", "Hk1"),
     show_row_names = TRUE,
     scale_rows = FALSE
   )
@@ -146,13 +140,13 @@ test_that("Heatmap plotting works", {
 test_that("Spatial feature plotting works", {
   spm <- create_test_data()
   spm <- normalizeSpatial(spm, verbose = FALSE)
-  pathways <- list(TestPathway = paste0("Gene", 1:10))
-  spm <- calculateMetabolicScores(spm, pathways = pathways, verbose = FALSE)
+  pathways <- list(TestPathway = c("Ndufa1", "Ndufa2", "Atp5a1"))
+  spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   # Plot genes
   p_genes <- plotSpatialFeatures(
     spm,
-    features = c("Gene1", "Gene2"),
+    features = c("Ndufa1", "Ndufa2"),
     point_size = 1
   )
   expect_ggplot(p_genes)
@@ -168,7 +162,7 @@ test_that("Spatial feature plotting works", {
   # Mixed features
   p_mixed <- plotSpatialFeatures(
     spm,
-    features = c("Gene1", "TestPathway"),
+    features = c("Ndufa1", "TestPathway"),
     ncol = 2
   )
   expect_ggplot(p_mixed)
@@ -178,10 +172,10 @@ test_that("Summary plots work", {
   spm <- create_test_data()
   spm <- normalizeSpatial(spm, verbose = FALSE)
   pathways <- list(
-    Pathway1 = paste0("Gene", 1:10),
-    Pathway2 = paste0("Gene", 11:20)
+    Pathway1 = c("Ndufa1", "Ndufa2", "Atp5a1"),
+    Pathway2 = c("Hk1", "Hk2", "Pfkl")
   )
-  spm <- calculateMetabolicScores(spm, pathways = pathways, verbose = FALSE)
+  spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   # Summary plot
   p <- plotMetabolicSummary(
@@ -196,8 +190,8 @@ test_that("Summary plots work", {
 test_that("Color scales work correctly", {
   spm <- create_test_data()
   spm <- normalizeSpatial(spm, verbose = FALSE)
-  pathways <- list(TestPathway = paste0("Gene", 1:10))
-  spm <- calculateMetabolicScores(spm, pathways = pathways, verbose = FALSE)
+  pathways <- list(TestPathway = c("Ndufa1", "Ndufa2", "Atp5a1"))
+  spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   # Test different color scales
   color_scales <- c("viridis", "plasma", "inferno", "magma", "cividis")
@@ -228,8 +222,8 @@ test_that("Plot error handling works", {
 
   # Invalid parameters
   spm <- normalizeSpatial(spm, verbose = FALSE)
-  pathways <- list(TestPathway = paste0("Gene", 1:10))
-  spm <- calculateMetabolicScores(spm, pathways = pathways, verbose = FALSE)
+  pathways <- list(TestPathway = c("Ndufa1", "Ndufa2", "Atp5a1"))
+  spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   expect_error(
     plotMetabolicComparison(spm, "TestPathway", group_by = "invalid_column"),
@@ -242,10 +236,10 @@ test_that("Additional visualization functions work", {
   spm <- normalizeSpatial(spm, verbose = FALSE)
   spm <- calculateQCMetrics(spm)
   pathways <- list(
-    Pathway1 = paste0("Gene", 1:10),
-    Pathway2 = paste0("Gene", 11:20)
+    Pathway1 = c("Ndufa1", "Ndufa2", "Atp5a1"),
+    Pathway2 = c("Hk1", "Hk2", "Pfkl")
   )
-  spm <- calculateMetabolicScores(spm, pathways = pathways, verbose = FALSE)
+  spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   # QC spatial plot
   p_qc <- plotQCSpatial(spm, metrics = c("nCount_RNA", "nFeature_RNA"))

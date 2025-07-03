@@ -132,20 +132,38 @@ create_sample_data <- function(condition, sample_id) {
     }
     
     # Gene names (including some real metabolic genes)
+    # Fix: Ensure we get exactly the number of genes we need
+    oxphos_genes <- getOXPHOSGenes("mouse")
+    glycolysis_genes <- getGlycolysisGenes("mouse")
+    
+    # Take up to 50 OXPHOS genes (pad with generic names if needed)
+    oxphos_use <- c(oxphos_genes[1:min(50, length(oxphos_genes))],
+                    if(length(oxphos_genes) < 50) paste0("OXPHOS_", (length(oxphos_genes)+1):50) else NULL)
+    
+    # Take up to 20 glycolysis genes (pad with generic names if needed) 
+    glycolysis_use <- c(glycolysis_genes[1:min(20, length(glycolysis_genes))],
+                        if(length(glycolysis_genes) < 20) paste0("Glycolysis_", (length(glycolysis_genes)+1):20) else NULL)
+    
+    # Create exactly n_genes gene names
     gene_names <- c(
-        getOXPHOSGenes("mouse")[1:50],
-        getGlycolysisGenes("mouse")[1:20],
+        oxphos_use[1:50],
+        glycolysis_use[1:20], 
         paste0("Gene", 71:n_genes)
     )
     
-    rownames(base_expr) <- gene_names[1:n_genes]
+    # Ensure we have exactly n_genes names
+    gene_names <- gene_names[1:n_genes]
+    
+    # Set row and column names
+    rownames(base_expr) <- gene_names
     colnames(base_expr) <- paste0(sample_id, "_", 1:n_spots_per_sample)
     
-    # Create metadata
+    # Create metadata - fix: ensure row.names length matches
     meta <- data.frame(
-        sample_id = sample_id,
-        condition = condition,
-        row.names = colnames(base_expr)
+        sample_id = rep(sample_id, n_spots_per_sample),
+        condition = rep(condition, n_spots_per_sample),
+        row.names = colnames(base_expr),
+        stringsAsFactors = FALSE
     )
     
     # Create spatial coordinates (grid layout)
@@ -153,6 +171,9 @@ create_sample_data <- function(condition, sample_id) {
         x = 1:40,
         y = 1:25
     )[1:n_spots_per_sample, ]
+    
+    # IMPORTANT: Set rownames for coordinates to match colnames of counts
+    rownames(coords) <- colnames(base_expr)
     
     return(list(counts = base_expr, meta = meta, coords = coords))
 }
@@ -165,11 +186,31 @@ sample_data <- list(
     SVD2 = create_sample_data("SVD", "SVD2")
 )
 
-# Combine into SpatialExperiment
+# Combine data more carefully - FIXED VERSION
 all_counts <- do.call(cbind, lapply(sample_data, "[[", "counts"))
 all_meta <- do.call(rbind, lapply(sample_data, "[[", "meta"))
 all_coords <- do.call(rbind, lapply(sample_data, "[[", "coords"))
 
+# CRITICAL FIX: Ensure all rownames/colnames are consistent
+cell_names <- colnames(all_counts)
+
+# Set rownames for metadata (should already be correct from create_sample_data)
+if(!identical(rownames(all_meta), cell_names)) {
+    rownames(all_meta) <- cell_names
+}
+
+# Set rownames for coordinates (this is likely the issue)
+rownames(all_coords) <- cell_names
+
+# Verify dimensions match before creating SpatialExperiment
+stopifnot(
+    ncol(all_counts) == nrow(all_meta),
+    ncol(all_counts) == nrow(all_coords),
+    identical(colnames(all_counts), rownames(all_meta)),
+    identical(colnames(all_counts), rownames(all_coords))
+)
+
+# Now create SpatialExperiment
 spe <- SpatialExperiment(
     assays = list(counts = all_counts),
     colData = all_meta,

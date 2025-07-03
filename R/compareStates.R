@@ -424,6 +424,24 @@ pathwayEnrichment <- function(de_results,
       de_results$log2FC < -log2fc_cutoff
   ]
 
+  # FIX: Check if we have any significant genes
+  if (length(sig_up) == 0 && length(sig_down) == 0) {
+    message("No significant genes found with the given cutoffs")
+    return(data.frame(
+      pathway = character(0),
+      direction = character(0),
+      n_pathway_genes = integer(0),
+      n_sig_genes = integer(0),
+      n_overlap = integer(0),
+      expected_overlap = numeric(0),
+      fold_enrichment = numeric(0),
+      pvalue = numeric(0),
+      genes = character(0),
+      adj_pvalue = numeric(0),
+      stringsAsFactors = FALSE
+    ))
+  }
+
   # Run enrichment for up and down separately
   if (method == "hypergeometric") {
     results_up <- .hypergeometricTest(sig_up, pathways, universe,
@@ -436,6 +454,24 @@ pathwayEnrichment <- function(de_results,
     stop("GSEA method not yet implemented")
   } else {
     stop("Method must be 'hypergeometric' or 'gsea'")
+  }
+
+  # FIX: Check if results is empty before sorting
+  if (is.null(results) || nrow(results) == 0) {
+    message("No enriched pathways found")
+    return(data.frame(
+      pathway = character(0),
+      direction = character(0),
+      n_pathway_genes = integer(0),
+      n_sig_genes = integer(0),
+      n_overlap = integer(0),
+      expected_overlap = numeric(0),
+      fold_enrichment = numeric(0),
+      pvalue = numeric(0),
+      genes = character(0),
+      adj_pvalue = numeric(0),
+      stringsAsFactors = FALSE
+    ))
   }
 
   # Sort by p-value
@@ -497,8 +533,22 @@ pathwayEnrichment <- function(de_results,
 
   results <- do.call(rbind, results[!sapply(results, is.null)])
 
+  # FIX: Check if results is empty or NULL
   if (is.null(results) || nrow(results) == 0) {
-    return(data.frame())
+    # Return empty data.frame with proper structure
+    return(data.frame(
+      pathway = character(0),
+      direction = character(0),
+      n_pathway_genes = integer(0),
+      n_sig_genes = integer(0),
+      n_overlap = integer(0),
+      expected_overlap = numeric(0),
+      fold_enrichment = numeric(0),
+      pvalue = numeric(0),
+      genes = character(0),
+      adj_pvalue = numeric(0),
+      stringsAsFactors = FALSE
+    ))
   }
 
   results$adj_pvalue <- p.adjust(results$pvalue, method = "BH")
