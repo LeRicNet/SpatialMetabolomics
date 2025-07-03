@@ -96,7 +96,7 @@ setMethod("compareMetabolicStates", "SpatialMetabolic",
 
             # Determine features to test
             if (is.null(features)) {
-              if (nrow(metabolicScores(object_sub)) > 0) {
+              if (nrow(metabolicScores(object)) > 0) {
                 test_mat <- t(metabolicScores(object_sub))
                 feature_type <- "pathways"
                 feature_names <- colnames(test_mat)
@@ -109,6 +109,18 @@ setMethod("compareMetabolicStates", "SpatialMetabolic",
                 # Limit to expressed genes
                 expression_rate <- colMeans(test_mat > 0)
                 expressed_genes <- names(expression_rate)[expression_rate > 0.1]
+
+                # Ensure we have at least some genes to test
+                if (length(expressed_genes) == 0) {
+                  # Lower threshold if no genes pass
+                  expressed_genes <- names(expression_rate)[expression_rate > 0.05]
+                }
+
+                if (length(expressed_genes) == 0) {
+                  # Use all non-zero genes
+                  expressed_genes <- names(expression_rate)[expression_rate > 0]
+                }
+
                 test_mat <- test_mat[, expressed_genes, drop = FALSE]
                 feature_names <- colnames(test_mat)
 
@@ -118,39 +130,42 @@ setMethod("compareMetabolicStates", "SpatialMetabolic",
               }
             } else {
               # Test specified features
-              # First, find which features are available in scores vs genes
-              available_in_scores <- if (nrow(metabolicScores(object_sub)) > 0) {
-                intersect(features, rownames(metabolicScores(object_sub)))
-              } else {
-                character(0)
-              }
-              available_in_genes <- intersect(features, rownames(object_sub))
+              features_in_scores <- features[features %in% rownames(metabolicScores(object))]
+              features_in_genes <- features[features %in% rownames(object)]
 
-              if (length(available_in_scores) >= length(available_in_genes) &&
-                  length(available_in_scores) > 0) {
-                # Use metabolic scores
-                features_to_use <- available_in_scores
-                test_mat <- t(metabolicScores(object_sub)[features_to_use, , drop = FALSE])
+              if (length(features_in_scores) > 0 && length(features_in_genes) == 0) {
+                # All features are pathways
+                score_mat <- metabolicScores(object_sub)[features_in_scores, , drop = FALSE]
+                # Ensure it's a matrix
+                if (!is.matrix(score_mat)) {
+                  score_mat <- matrix(score_mat, nrow = length(features_in_scores), ncol = ncol(object_sub))
+                  rownames(score_mat) <- features_in_scores
+                  colnames(score_mat) <- colnames(object_sub)
+                }
+                test_mat <- t(score_mat)
                 feature_type <- "pathways"
-                if (verbose && length(features_to_use) < length(features)) {
-                  message("Using ", length(features_to_use), " of ", length(features),
-                          " features from metabolic scores")
+              } else if (length(features_in_genes) > 0 && length(features_in_scores) == 0) {
+                # All features are genes
+                expr_mat <- logcounts(object_sub)[features_in_genes, , drop = FALSE]
+                # Ensure it's a matrix
+                if (!is.matrix(expr_mat)) {
+                  expr_mat <- matrix(expr_mat, nrow = length(features_in_genes), ncol = ncol(object_sub))
+                  rownames(expr_mat) <- features_in_genes
+                  colnames(expr_mat) <- colnames(object_sub)
                 }
-              } else if (length(available_in_genes) > 0) {
-                # Use gene expression
-                features_to_use <- available_in_genes
-                test_mat <- t(logcounts(object_sub)[features_to_use, , drop = FALSE])
+                test_mat <- t(expr_mat)
                 feature_type <- "genes"
-                if (verbose && length(features_to_use) < length(features)) {
-                  message("Using ", length(features_to_use), " of ", length(features),
-                          " features from gene expression")
-                }
+              } else if (length(features_in_scores) > 0 && length(features_in_genes) > 0) {
+                # Mixed features - not allowed
+                stop("Cannot mix pathway scores and genes in the same analysis. ",
+                     "Found ", length(features_in_scores), " pathways and ",
+                     length(features_in_genes), " genes.")
               } else {
-                stop("None of the specified features found in the data")
+                # No features found
+                missing <- setdiff(features, c(rownames(object), rownames(metabolicScores(object))))
+                stop("Features not found: ", paste(missing, collapse = ", "))
               }
-
               feature_names <- colnames(test_mat)
-              features <- features_to_use  # Update features to only include available ones
             }
 
             if (verbose) {
@@ -445,24 +460,6 @@ pathwayEnrichment <- function(de_results,
       de_results$log2FC < -log2fc_cutoff
   ]
 
-  # FIX: Check if we have any significant genes
-  if (length(sig_up) == 0 && length(sig_down) == 0) {
-    message("No significant genes found with the given cutoffs")
-    return(data.frame(
-      pathway = character(0),
-      direction = character(0),
-      n_pathway_genes = integer(0),
-      n_sig_genes = integer(0),
-      n_overlap = integer(0),
-      expected_overlap = numeric(0),
-      fold_enrichment = numeric(0),
-      pvalue = numeric(0),
-      genes = character(0),
-      adj_pvalue = numeric(0),
-      stringsAsFactors = FALSE
-    ))
-  }
-
   # Run enrichment for up and down separately
   if (method == "hypergeometric") {
     results_up <- .hypergeometricTest(sig_up, pathways, universe,
@@ -475,24 +472,6 @@ pathwayEnrichment <- function(de_results,
     stop("GSEA method not yet implemented")
   } else {
     stop("Method must be 'hypergeometric' or 'gsea'")
-  }
-
-  # FIX: Check if results is empty before sorting
-  if (is.null(results) || nrow(results) == 0) {
-    message("No enriched pathways found")
-    return(data.frame(
-      pathway = character(0),
-      direction = character(0),
-      n_pathway_genes = integer(0),
-      n_sig_genes = integer(0),
-      n_overlap = integer(0),
-      expected_overlap = numeric(0),
-      fold_enrichment = numeric(0),
-      pvalue = numeric(0),
-      genes = character(0),
-      adj_pvalue = numeric(0),
-      stringsAsFactors = FALSE
-    ))
   }
 
   # Sort by p-value
@@ -554,22 +533,8 @@ pathwayEnrichment <- function(de_results,
 
   results <- do.call(rbind, results[!sapply(results, is.null)])
 
-  # FIX: Check if results is empty or NULL
   if (is.null(results) || nrow(results) == 0) {
-    # Return empty data.frame with proper structure
-    return(data.frame(
-      pathway = character(0),
-      direction = character(0),
-      n_pathway_genes = integer(0),
-      n_sig_genes = integer(0),
-      n_overlap = integer(0),
-      expected_overlap = numeric(0),
-      fold_enrichment = numeric(0),
-      pvalue = numeric(0),
-      genes = character(0),
-      adj_pvalue = numeric(0),
-      stringsAsFactors = FALSE
-    ))
+    return(data.frame())
   }
 
   results$adj_pvalue <- p.adjust(results$pvalue, method = "BH")

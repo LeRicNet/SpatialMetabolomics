@@ -122,48 +122,36 @@ create_sample_data <- function(condition, sample_id) {
     
     # Add condition-specific effects
     if (condition == "SVD") {
-        # Reduce OXPHOS genes
-        oxphos_idx <- 1:50
+        # Reduce OXPHOS genes (first 50 genes)
+        oxphos_idx <- 1:min(50, n_genes)
         base_expr[oxphos_idx, ] <- base_expr[oxphos_idx, ] * 0.7
         
-        # Increase glycolysis genes
-        glycolysis_idx <- 51:70
+        # Increase glycolysis genes (next 20 genes)
+        glycolysis_idx <- 51:min(70, n_genes)
         base_expr[glycolysis_idx, ] <- base_expr[glycolysis_idx, ] * 1.5
     }
     
-    # Gene names (including some real metabolic genes)
-    # Fix: Ensure we get exactly the number of genes we need
-    oxphos_genes <- getOXPHOSGenes("mouse")
-    glycolysis_genes <- getGlycolysisGenes("mouse")
-    
-    # Take up to 50 OXPHOS genes (pad with generic names if needed)
-    oxphos_use <- c(oxphos_genes[1:min(50, length(oxphos_genes))],
-                    if(length(oxphos_genes) < 50) paste0("OXPHOS_", (length(oxphos_genes)+1):50) else NULL)
-    
-    # Take up to 20 glycolysis genes (pad with generic names if needed) 
-    glycolysis_use <- c(glycolysis_genes[1:min(20, length(glycolysis_genes))],
-                        if(length(glycolysis_genes) < 20) paste0("Glycolysis_", (length(glycolysis_genes)+1):20) else NULL)
-    
-    # Create exactly n_genes gene names
+    # Gene names (mix of real and synthetic)
     gene_names <- c(
-        oxphos_use[1:50],
-        glycolysis_use[1:20], 
-        paste0("Gene", 71:n_genes)
+        paste0("Ndufa", 1:30),  # OXPHOS-like genes
+        paste0("Cox4i", 1:20),   # More OXPHOS-like genes
+        paste0("Hk", 1:10),      # Glycolysis-like genes
+        paste0("Pfk", c("l", "m", "p")),  # More glycolysis-like genes
+        paste0("Eno", 1:3),
+        paste0("Pkm", 1:4),
+        paste0("Gene", 1:(n_genes - 70))  # Fill remaining
     )
     
-    # Ensure we have exactly n_genes names
     gene_names <- gene_names[1:n_genes]
     
-    # Set row and column names
     rownames(base_expr) <- gene_names
     colnames(base_expr) <- paste0(sample_id, "_", 1:n_spots_per_sample)
     
-    # Create metadata - fix: ensure row.names length matches
+    # Create metadata
     meta <- data.frame(
-        sample_id = rep(sample_id, n_spots_per_sample),
-        condition = rep(condition, n_spots_per_sample),
-        row.names = colnames(base_expr),
-        stringsAsFactors = FALSE
+        sample_id = sample_id,
+        condition = condition,
+        row.names = colnames(base_expr)
     )
     
     # Create spatial coordinates (grid layout)
@@ -171,9 +159,6 @@ create_sample_data <- function(condition, sample_id) {
         x = 1:40,
         y = 1:25
     )[1:n_spots_per_sample, ]
-    
-    # IMPORTANT: Set rownames for coordinates to match colnames of counts
-    rownames(coords) <- colnames(base_expr)
     
     return(list(counts = base_expr, meta = meta, coords = coords))
 }
@@ -186,31 +171,11 @@ sample_data <- list(
     SVD2 = create_sample_data("SVD", "SVD2")
 )
 
-# Combine data more carefully - FIXED VERSION
+# Combine into SpatialExperiment
 all_counts <- do.call(cbind, lapply(sample_data, "[[", "counts"))
 all_meta <- do.call(rbind, lapply(sample_data, "[[", "meta"))
 all_coords <- do.call(rbind, lapply(sample_data, "[[", "coords"))
 
-# CRITICAL FIX: Ensure all rownames/colnames are consistent
-cell_names <- colnames(all_counts)
-
-# Set rownames for metadata (should already be correct from create_sample_data)
-if(!identical(rownames(all_meta), cell_names)) {
-    rownames(all_meta) <- cell_names
-}
-
-# Set rownames for coordinates (this is likely the issue)
-rownames(all_coords) <- cell_names
-
-# Verify dimensions match before creating SpatialExperiment
-stopifnot(
-    ncol(all_counts) == nrow(all_meta),
-    ncol(all_counts) == nrow(all_coords),
-    identical(colnames(all_counts), rownames(all_meta)),
-    identical(colnames(all_counts), rownames(all_coords))
-)
-
-# Now create SpatialExperiment
 spe <- SpatialExperiment(
     assays = list(counts = all_counts),
     colData = all_meta,
@@ -310,7 +275,8 @@ spm <- calculateMetabolicScores(
     pathways = pathways,
     method = "seurat",
     scale = TRUE,
-    nbin = 24
+    nbin = 24,
+    BPPARAM = MulticoreParam(workers = 4)
 )
 
 # View scores
@@ -398,7 +364,7 @@ plotSpatialGradients(spm, top_n = 6)
 
 ```{r differential}
 # Compare metabolic states between WT and SVD
-de_results <- compareMetabolicStates(
+pathway_results <- compareMetabolicStates(
     spm,
     condition = "condition",
     ref_group = "WT",
@@ -406,7 +372,7 @@ de_results <- compareMetabolicStates(
     test_type = "wilcox"
 )
 
-print(de_results)
+print(pathway_results)
 
 # Visualize results
 p_compare <- plotMetabolicComparison(
@@ -430,40 +396,41 @@ In our example, we observe:
 ## Gene-Level Analysis
 
 ```{r gene_analysis}
-# Compare individual genes
-# First check which genes are actually present
-available_oxphos <- intersect(pathways$OXPHOS[1:20], rownames(spm))
-available_glycolysis <- intersect(pathways$Glycolysis[1:10], rownames(spm))
-test_genes <- c(available_oxphos, available_glycolysis)
+# Get genes that are actually present in our data
+oxphos_genes_present <- intersect(pathways$OXPHOS, rownames(spm))
+glycolysis_genes_present <- intersect(pathways$Glycolysis, rownames(spm))
 
-if (length(test_genes) > 0) {
-  gene_de <- compareMetabolicStates(
-    spm,
-    condition = "condition",
-    ref_group = "WT",
-    test_group = "SVD",
-    features = test_genes,
-    test_type = "wilcox"
-  )
+# Select up to 20 OXPHOS and 10 glycolysis genes
+genes_to_test <- c(
+    head(oxphos_genes_present, 20),
+    head(glycolysis_genes_present, 10)
+)
+
+# Only proceed if we have genes to test
+if (length(genes_to_test) > 0) {
+    # Compare individual genes
+    gene_de <- compareMetabolicStates(
+        spm,
+        condition = "condition",
+        ref_group = "WT",
+        test_group = "SVD",
+        features = genes_to_test,
+        test_type = "wilcox"
+    )
+    
+    # Volcano plot
+    if (nrow(gene_de) > 0) {
+        p <- plotVolcano(
+            gene_de,
+            pval_cutoff = 0.05,
+            fc_cutoff = 0.5,
+            label_top = 10
+        ) + labs(title = "Differential Expression: Metabolic Genes")
+        print(p)
+    }
 } else {
-  # Fallback: use any available genes from our simulated data
-  gene_de <- compareMetabolicStates(
-    spm,
-    condition = "condition", 
-    ref_group = "WT",
-    test_group = "SVD",
-    features = head(rownames(spm), 30),
-    test_type = "wilcox"
-  )
+    message("No metabolic genes found in the example data for gene-level analysis")
 }
-
-# Volcano plot
-plotVolcano(
-    gene_de,
-    pval_cutoff = 0.05,
-    fc_cutoff = 0.5,
-    label_top = 10
-) + labs(title = "Differential Expression: Metabolic Genes")
 ```
 
 # Advanced Analysis
@@ -505,23 +472,32 @@ ggplot(neighborhood_data[neighborhood_data$sample %in% c("WT1", "SVD1"), ],
 Test for enrichment in differentially expressed genes:
 
 ```{r enrichment}
-# Get all gene-level results
-all_gene_de <- compareMetabolicStates(
-    spm,
-    features = rownames(spm),
-    test_type = "wilcox",
-    verbose = FALSE
-)
-
-# Run enrichment analysis
-enrichment <- pathwayEnrichment(
-    all_gene_de,
-    pathways = pathways,
-    pvalue_cutoff = 0.05,
-    log2fc_cutoff = 0.25
-)
-
-print(enrichment[enrichment$adj_pvalue < 0.1, ])
+# Only run enrichment if we have gene-level results
+if (exists("gene_de") && nrow(gene_de) > 0) {
+    # Get all gene-level results
+    all_gene_de <- compareMetabolicStates(
+        spm,
+        features = rownames(spm),
+        test_type = "wilcox",
+        verbose = FALSE
+    )
+    
+    # Run enrichment analysis
+    enrichment <- pathwayEnrichment(
+        all_gene_de,
+        pathways = pathways,
+        pvalue_cutoff = 0.05,
+        log2fc_cutoff = 0.25
+    )
+    
+    if (nrow(enrichment) > 0) {
+        print(enrichment[enrichment$adj_pvalue < 0.1, ])
+    } else {
+        message("No significant pathway enrichments found in example data")
+    }
+} else {
+    message("Skipping enrichment analysis - no gene-level results available")
+}
 ```
 
 # Creating Publication Figures
@@ -550,8 +526,14 @@ p_b <- plotMetabolicSummary(
 p_c <- plotSpatialGradients(spm, top_n = 8)
 
 # Panel D: Volcano plot
-p_d <- plotVolcano(de_results, label_top = 5) +
-    labs(title = "Pathway Differential Activity")
+if (exists("pathway_results")) {
+    p_d <- plotVolcano(pathway_results, label_top = 5) +
+        labs(title = "Pathway Differential Activity")
+} else {
+    p_d <- ggplot() + 
+        theme_void() + 
+        labs(title = "No pathway results available")
+}
 
 # Combine
 figure <- (p_a | p_b) / (p_c | p_d) +
