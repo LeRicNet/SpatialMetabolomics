@@ -35,6 +35,7 @@ src/*.dll
 /output/
 /figures/
 /cache/
+/data/
 
 # Large data files
 *.h5

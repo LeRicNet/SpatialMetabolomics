@@ -23,10 +23,10 @@ register(MulticoreParam(workers = 4))
 data_dir <- "data/visium_hd/"
 output_dir <- "results/"
 samples <- list(
-  WT1 = "WT_sample1",
-  WT2 = "WT_sample2",
-  SVD1 = "SVD_sample1",
-  SVD2 = "SVD_sample2"
+  WT1 = "WT_sample1", # Ctrl
+  WT2 = "WT_sample2", # Tg129_213
+  SVD1 = "SVD_sample1", # Tg88
+  SVD2 = "SVD_sample2" # Tg88_148
 )
 
 # Create output directory
