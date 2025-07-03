@@ -85,7 +85,7 @@ create_test_data <- function(n_genes = 100, n_spots = 50, n_samples = 2) {
 
   # Convert to SpatialMetabolic
   spm <- as(spe, "SpatialMetabolic")
-  comparisonGroups(spm) <- factor(col_data$condition)
+  comparisonGroups(spm) <- factor(col_data$condition, levels = c("WT", "Disease"))
 
   return(spm)
 }
