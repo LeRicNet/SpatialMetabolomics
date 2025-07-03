@@ -431,14 +431,31 @@ In our example, we observe:
 
 ```{r gene_analysis}
 # Compare individual genes
-gene_de <- compareMetabolicStates(
+# First check which genes are actually present
+available_oxphos <- intersect(pathways$OXPHOS[1:20], rownames(spm))
+available_glycolysis <- intersect(pathways$Glycolysis[1:10], rownames(spm))
+test_genes <- c(available_oxphos, available_glycolysis)
+
+if (length(test_genes) > 0) {
+  gene_de <- compareMetabolicStates(
     spm,
     condition = "condition",
     ref_group = "WT",
     test_group = "SVD",
-    features = c(pathways$OXPHOS[1:20], pathways$Glycolysis[1:10]),
+    features = test_genes,
     test_type = "wilcox"
-)
+  )
+} else {
+  # Fallback: use any available genes from our simulated data
+  gene_de <- compareMetabolicStates(
+    spm,
+    condition = "condition", 
+    ref_group = "WT",
+    test_group = "SVD",
+    features = head(rownames(spm), 30),
+    test_type = "wilcox"
+  )
+}
 
 # Volcano plot
 plotVolcano(

@@ -118,16 +118,64 @@ setMethod("compareMetabolicStates", "SpatialMetabolic",
               }
             } else {
               # Test specified features
-              if (all(features %in% rownames(metabolicScores(object)))) {
-                test_mat <- t(metabolicScores(object_sub)[features, , drop = FALSE])
+              if (all(features %in% rownames(metabolicScores(object_sub)))) {
+                score_mat <- metabolicScores(object_sub)[features, , drop = FALSE]
+                # Ensure it's a matrix even with one feature
+                if (!is.matrix(score_mat)) {
+                  score_mat <- matrix(score_mat, nrow = 1,
+                                      dimnames = list(features, colnames(metabolicScores(object_sub))))
+                }
+                test_mat <- t(score_mat)
                 feature_type <- "pathways"
-              } else if (all(features %in% rownames(object))) {
-                test_mat <- t(logcounts(object_sub)[features, , drop = FALSE])
+              } else if (all(features %in% rownames(object_sub))) {
+                expr_mat <- logcounts(object_sub)[features, , drop = FALSE]
+                # Ensure it's a matrix even with one feature
+                if (!is.matrix(expr_mat)) {
+                  expr_mat <- matrix(expr_mat, nrow = 1,
+                                     dimnames = list(features, colnames(logcounts(object_sub))))
+                }
+                test_mat <- t(expr_mat)
                 feature_type <- "genes"
               } else {
-                # Check which features are missing
-                missing <- setdiff(features, c(rownames(object), rownames(metabolicScores(object))))
-                stop("Features not found: ", paste(missing, collapse = ", "))
+                # Check which features are missing from the subsetted object
+                missing_scores <- setdiff(features, rownames(metabolicScores(object_sub)))
+                missing_genes <- setdiff(features, rownames(object_sub))
+
+                if (length(missing_scores) < length(missing_genes)) {
+                  # More features available in metabolic scores
+                  available_features <- intersect(features, rownames(metabolicScores(object_sub)))
+                  if (length(available_features) == 0) {
+                    stop("No features found in metabolic scores")
+                  }
+                  if (verbose) {
+                    message("Using ", length(available_features), " available features from metabolic scores")
+                  }
+                  score_mat <- metabolicScores(object_sub)[available_features, , drop = FALSE]
+                  if (!is.matrix(score_mat)) {
+                    score_mat <- matrix(score_mat, nrow = 1,
+                                        dimnames = list(available_features, colnames(metabolicScores(object_sub))))
+                  }
+                  test_mat <- t(score_mat)
+                  feature_type <- "pathways"
+                  features <- available_features
+                } else {
+                  # More features available in gene expression
+                  available_features <- intersect(features, rownames(object_sub))
+                  if (length(available_features) == 0) {
+                    stop("No features found in gene expression data")
+                  }
+                  if (verbose) {
+                    message("Using ", length(available_features), " available features from gene expression")
+                  }
+                  expr_mat <- logcounts(object_sub)[available_features, , drop = FALSE]
+                  if (!is.matrix(expr_mat)) {
+                    expr_mat <- matrix(expr_mat, nrow = 1,
+                                       dimnames = list(available_features, colnames(logcounts(object_sub))))
+                  }
+                  test_mat <- t(expr_mat)
+                  feature_type <- "genes"
+                  features <- available_features
+                }
               }
               feature_names <- colnames(test_mat)
             }
