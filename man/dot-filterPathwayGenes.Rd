@@ -4,7 +4,7 @@
 \alias{.filterPathwayGenes}
 \title{Filter pathway genes to those present in data}
 \usage{
-.filterPathwayGenes(pathway_list, object)
+.filterPathwayGenes(pathway_list, object, verbose = TRUE)
 }
 \description{
 Filter pathway genes to those present in data
