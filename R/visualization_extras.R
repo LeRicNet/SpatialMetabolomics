@@ -225,10 +225,12 @@ plotSampleCorrelation <- function(object,
   # Calculate correlation
   cor_mat <- cor(data_mat, method = method)
 
-  # Get sample annotations - FIX for S4 compatibility
-  sample_meta <- unique(as.data.frame(colData(object))[, c("sample_id", "condition"), drop = FALSE])
+  # Get sample annotations
+  sample_meta <- unique(colData(object)[, c("sample_id", "condition")])
+  # Fix duplicate row names issue
+  sample_meta <- sample_meta[!duplicated(sample_meta$sample_id), ]
   rownames(sample_meta) <- sample_meta$sample_id
-  sample_meta <- sample_meta[colnames(cor_mat), "condition", drop = FALSE]
+  sample_meta <- sample_meta[colnames(cor_mat), , drop = FALSE]
 
   # Ensure it's a proper data.frame
   if (!is.data.frame(sample_meta)) {

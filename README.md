@@ -231,9 +231,9 @@ genes_present <- lapply(pathways, function(x) {
 If you use SpatialMetabolics in your research, please cite:
 
 ```
-Your Name et al. (2024). SpatialMetabolics: Spatial metabolic analysis 
+Eric Prince (2025). SpatialMetabolics: Spatial metabolic analysis 
 for Visium HD brain transcriptomics. R package version 1.0.0.
-https://github.com/yourusername/SpatialMetabolics
+https://github.com/LeRicNet/SpatialMetabolics
 ```
 
 ## Contributing
@@ -246,7 +246,7 @@ Artistic-2.0
 
 ## Contact
 
-- Bug reports: https://github.com/yourusername/SpatialMetabolics/issues
+- Bug reports: https://github.com/lericnet/SpatialMetabolics/issues
 - Email: your.email@example.com
 
 ## Acknowledgments

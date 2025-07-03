@@ -46,8 +46,8 @@ normalizeSpatial <- function(object,
     # Log transform
     log_counts <- log1p(norm_counts)
 
-    # Store
-    logcounts(object) <- log_counts
+    # Ensure logcounts is stored properly even for edge cases
+    logcounts(object) <- as(log_counts, "dgCMatrix")
 
   } else if (method == "SCTransform") {
     # Requires Seurat integration
@@ -288,7 +288,8 @@ runPCA <- function(object,
     }
   }
 
-  # Transpose for prcomp (expects samples in rows)
+  # Fix: Convert to regular matrix and transpose for prcomp (expects samples in rows)
+  expr_mat <- as.matrix(expr_mat)
   expr_mat <- t(expr_mat)
 
   # Run PCA
@@ -319,7 +320,6 @@ runPCA <- function(object,
 
   return(object)
 }
-
 #' Run UMAP on spatial data
 #'
 #' @param object SpatialMetabolic object

@@ -4,6 +4,8 @@ library(testthat)
 library(SpatialMetabolics)
 library(SpatialExperiment)
 library(SingleCellExperiment)
+library(SummarizedExperiment)  # Add this for assayNames
+library(Matrix)  # Add this line
 
 # Test class creation and validity
 test_that("SpatialMetabolic class creation works", {
@@ -21,8 +23,8 @@ test_that("Accessor methods work correctly", {
 
   # Test metabolic pathways accessor
   test_pathways <- list(
-    pathway1 = c("Ndufa1", "Ndufa2", "Atp5a1"),
-    pathway2 = c("Hk1", "Hk2", "Pfkl")
+    pathway1 = c("Gene1", "Gene2", "Gene3"),
+    pathway2 = c("Gene4", "Gene5", "Gene6")
   )
 
   metabolicPathways(spm) <- test_pathways
@@ -110,8 +112,8 @@ test_that("Metabolic score calculation works", {
 
   # Use genes that exist in our test data
   test_pathways <- list(
-    TestOXPHOS = c("Ndufa1", "Ndufa2", "Atp5a1"),
-    TestGlycolysis = c("Hk1", "Hk2", "Pfkl")
+    TestOXPHOS = c("Gene1", "Gene2", "Gene3"),
+    TestGlycolysis = c("Gene4", "Gene5", "Gene6")
   )
 
   # Calculate scores
@@ -139,10 +141,12 @@ test_that("Spatial gradient detection works", {
   # Create artificial spatial pattern
   coords <- spatialCoords(spm)
   spatial_feature <- sin(coords[, 1] / 5) + cos(coords[, 2] / 5)
-  logcounts(spm)["Ndufa1", ] <- spatial_feature + rnorm(ncol(spm), sd = 0.1)
+  expr_mat <- as.matrix(logcounts(spm))
+  expr_mat["Gene1", ] <- spatial_feature + rnorm(ncol(spm), sd = 0.1)
+  logcounts(spm) <- expr_mat
 
   # Calculate metabolic scores first
-  pathways <- list(TestPathway = c("Ndufa1", "Ndufa2", "Atp5a1"))
+  pathways <- list(TestPathway = c("Gene1", "Gene2", "Gene3"))
   spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   # Detect gradients
@@ -167,7 +171,7 @@ test_that("Basic visualization functions work", {
   spm <- normalizeSpatial(spm, verbose = FALSE)
 
   # Calculate scores for plotting
-  pathways <- list(TestPathway = c("Ndufa1", "Ndufa2", "Atp5a1"))
+  pathways <- list(TestPathway = c("Gene1", "Gene2", "Gene3"))
   spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   # Test spatial plot
@@ -224,7 +228,7 @@ test_that("Functions handle errors appropriately", {
 
   # Test error with invalid pathway - USE ENOUGH GENES
   spm <- normalizeSpatial(spm, verbose = FALSE)
-  spm <- calculateMetabolicScores(spm, pathways = list(Test = c("Ndufa1", "Ndufa2", "Atp5a1")))  # FIXED: 3 genes
+  spm <- calculateMetabolicScores(spm, pathways = list(Test = c("Gene1", "Gene2", "Gene3")))  # FIXED: 3 genes
   expect_error(
     plotSpatialMetabolicScore(spm, pathway = "InvalidPathway"),
     "not found in metabolic scores"
@@ -239,20 +243,23 @@ test_that("Functions handle errors appropriately", {
 
 # Test edge cases - FIXED
 test_that("Functions handle edge cases", {
-  # Empty object - use the fixed helper function
+  # Empty object
   spm_empty <- create_test_data(n_genes = 0, n_spots = 0)
   expect_equal(nrow(spm_empty), 0)
   expect_equal(ncol(spm_empty), 0)
 
-  # Single cell/gene - FIXED: account for 2 samples
-  spm_single <- create_test_data(n_genes = 1, n_spots = 1)
+  # Single cell/gene - fix to use n_samples = 1 for truly single spot
+  spm_single <- create_test_data(n_genes = 1, n_spots = 1, n_samples = 1)
   spm_single <- normalizeSpatial(spm_single, verbose = FALSE)
-  expect_equal(dim(logcounts(spm_single)), c(1, 2))  # FIXED: 1 gene, 2 spots (2 samples)
+  expect_equal(dim(logcounts(spm_single)), c(1, 1))
 
-  # All zero counts
+  # All zero counts - ensure logcounts assay exists
   spm_zero <- create_test_data()
   counts(spm_zero)[] <- 0
-  smp_zero <- normalizeSpatial(spm_zero, verbose = FALSE)
+  spm_zero <- normalizeSpatial(spm_zero, verbose = FALSE)
+
+  # Check that logcounts exists and is all zeros
+  expect_true("logcounts" %in% assayNames(spm_zero))
   expect_true(all(logcounts(spm_zero) == 0))
 })
 
@@ -268,8 +275,8 @@ test_that("Full workflow integration works", {
 
   # Calculate metabolic scores with genes we know exist
   test_pathways <- list(
-    TestOXPHOS = c("Ndufa1", "Ndufa2", "Atp5a1"),
-    TestGlycolysis = c("Hk1", "Hk2", "Pfkl")
+    TestOXPHOS = c("Gene1", "Gene2", "Gene3"),
+    TestGlycolysis = c("Gene4", "Gene5", "Gene6")
   )
   spm <- calculateMetabolicScores(spm, pathways = test_pathways)  # REMOVED verbose = FALSE
 

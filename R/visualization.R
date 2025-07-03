@@ -372,16 +372,17 @@ plotMetabolicHeatmap <- function(object,
     mat[is.na(mat)] <- 0
   }
 
-  # Get annotation - FIX for S4 compatibility
+  # Get annotation
   if (ncol(mat) == length(unique(colData(object)$sample_id))) {
     # Per-sample data
-    sample_info <- unique(as.data.frame(colData(object))[, c("sample_id", group_by), drop = FALSE])
+    sample_info <- unique(colData(object)[, c("sample_id", group_by), drop = FALSE])
+    # Fix duplicate row names issue
+    sample_info <- sample_info[!duplicated(sample_info$sample_id), ]
     rownames(sample_info) <- sample_info$sample_id
     col_anno <- sample_info[colnames(mat), group_by, drop = FALSE]
   } else {
-    # Per-spot data - convert S4 to data.frame first
-    col_data_df <- as.data.frame(colData(object))
-    col_anno <- col_data_df[, group_by, drop = FALSE]
+    # Per-spot data
+    col_anno <- colData(object)[, group_by, drop = FALSE]
   }
 
   # Convert col_anno to data.frame if it isn't already

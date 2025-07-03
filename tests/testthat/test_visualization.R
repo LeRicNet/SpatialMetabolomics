@@ -32,7 +32,7 @@ test_that("Spatial metabolic score plotting works", {
 test_that("Metabolic comparison plots work", {
   spm <- create_test_data()
   spm <- normalizeSpatial(spm, verbose = FALSE)
-  pathways <- list(TestPathway = c("Ndufa1", "Ndufa2", "Atp5a1"))
+  pathways <- list(TestPathway = c("Gene1", "Gene2", "Gene3"))
   spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   # Violin plot
@@ -64,7 +64,7 @@ test_that("Metabolic comparison plots work", {
 test_that("Spatial gradient plotting works", {
   spm <- create_test_data()
   spm <- normalizeSpatial(spm, verbose = FALSE)
-  pathways <- list(TestPathway = c("Ndufa1", "Ndufa2", "Atp5a1"))
+  pathways <- list(TestPathway = c("Gene1", "Gene2", "Gene3"))
   spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   # Detect gradients first
@@ -112,8 +112,8 @@ test_that("Heatmap plotting works", {
   spm <- create_test_data()
   spm <- normalizeSpatial(spm, verbose = FALSE)
   pathways <- list(
-    Pathway1 = c("Ndufa1", "Ndufa2", "Atp5a1"),
-    Pathway2 = c("Hk1", "Hk2", "Pfkl")
+    Pathway1 =  c("Gene1", "Gene2", "Gene3"),
+    Pathway2 = c("Gene4", "Gene5", "Gene6")
   )
   spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
@@ -130,7 +130,7 @@ test_that("Heatmap plotting works", {
   # Test with specific features
   p2 <- plotMetabolicHeatmap(
     spm,
-    features = c("Ndufa1", "Hk1"),
+    features = c("Gene1", "Gene3"),
     show_row_names = TRUE,
     scale_rows = FALSE
   )
@@ -140,13 +140,13 @@ test_that("Heatmap plotting works", {
 test_that("Spatial feature plotting works", {
   spm <- create_test_data()
   spm <- normalizeSpatial(spm, verbose = FALSE)
-  pathways <- list(TestPathway = c("Ndufa1", "Ndufa2", "Atp5a1"))
+  pathways <- list(TestPathway = c("Gene1", "Gene2", "Gene3"))
   spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   # Plot genes
   p_genes <- plotSpatialFeatures(
     spm,
-    features = c("Ndufa1", "Ndufa2"),
+    features = c("Gene1", "Gene2"),
     point_size = 1
   )
   expect_ggplot(p_genes)
@@ -162,7 +162,7 @@ test_that("Spatial feature plotting works", {
   # Mixed features
   p_mixed <- plotSpatialFeatures(
     spm,
-    features = c("Ndufa1", "TestPathway"),
+    features = c("Gene1", "TestPathway"),
     ncol = 2
   )
   expect_ggplot(p_mixed)
@@ -172,8 +172,8 @@ test_that("Summary plots work", {
   spm <- create_test_data()
   spm <- normalizeSpatial(spm, verbose = FALSE)
   pathways <- list(
-    Pathway1 = c("Ndufa1", "Ndufa2", "Atp5a1"),
-    Pathway2 = c("Hk1", "Hk2", "Pfkl")
+    Pathway1 = c("Gene1", "Gene2", "Gene3"),
+    Pathway2 = c("Gene4", "Gene5", "Gene6")
   )
   spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
@@ -190,7 +190,7 @@ test_that("Summary plots work", {
 test_that("Color scales work correctly", {
   spm <- create_test_data()
   spm <- normalizeSpatial(spm, verbose = FALSE)
-  pathways <- list(TestPathway = c("Ndufa1", "Ndufa2", "Atp5a1"))
+  pathways <- list(TestPathway = c("Gene1", "Gene2", "Gene3"))
   spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   # Test different color scales
@@ -222,7 +222,7 @@ test_that("Plot error handling works", {
 
   # Invalid parameters
   spm <- normalizeSpatial(spm, verbose = FALSE)
-  pathways <- list(TestPathway = c("Ndufa1", "Ndufa2", "Atp5a1"))
+  pathways <- list(TestPathway = c("Gene1", "Gene2", "Gene3"))
   spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   expect_error(
@@ -236,8 +236,8 @@ test_that("Additional visualization functions work", {
   spm <- normalizeSpatial(spm, verbose = FALSE)
   spm <- calculateQCMetrics(spm)
   pathways <- list(
-    Pathway1 = c("Ndufa1", "Ndufa2", "Atp5a1"),
-    Pathway2 = c("Hk1", "Hk2", "Pfkl")
+    Pathway1 = c("Gene1", "Gene2", "Gene3"),
+    Pathway2 = c("Gene4", "Gene5", "Gene6")
   )
   spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 

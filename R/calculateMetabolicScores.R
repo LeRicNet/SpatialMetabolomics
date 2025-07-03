@@ -189,6 +189,8 @@ setMethod("calculateMetabolicScores", "SpatialMetabolic",
   expr_mat <- logcounts(object)
 
   # Calculate average expression for binning
+  # Fix: Convert sparse matrix to regular matrix for rowMeans
+  expr_mat <- as.matrix(expr_mat)
   avg_expr <- rowMeans(expr_mat)
 
   # Remove genes with no expression
