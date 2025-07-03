@@ -96,7 +96,7 @@ setMethod("compareMetabolicStates", "SpatialMetabolic",
 
             # Determine features to test
             if (is.null(features)) {
-              if (nrow(metabolicScores(object)) > 0) {
+              if (nrow(metabolicScores(object_sub)) > 0) {
                 test_mat <- t(metabolicScores(object_sub))
                 feature_type <- "pathways"
                 feature_names <- colnames(test_mat)
@@ -118,66 +118,39 @@ setMethod("compareMetabolicStates", "SpatialMetabolic",
               }
             } else {
               # Test specified features
-              if (all(features %in% rownames(metabolicScores(object_sub)))) {
-                score_mat <- metabolicScores(object_sub)[features, , drop = FALSE]
-                # Ensure it's a matrix even with one feature
-                if (!is.matrix(score_mat)) {
-                  score_mat <- matrix(score_mat, nrow = 1,
-                                      dimnames = list(features, colnames(metabolicScores(object_sub))))
-                }
-                test_mat <- t(score_mat)
-                feature_type <- "pathways"
-              } else if (all(features %in% rownames(object_sub))) {
-                expr_mat <- logcounts(object_sub)[features, , drop = FALSE]
-                # Ensure it's a matrix even with one feature
-                if (!is.matrix(expr_mat)) {
-                  expr_mat <- matrix(expr_mat, nrow = 1,
-                                     dimnames = list(features, colnames(logcounts(object_sub))))
-                }
-                test_mat <- t(expr_mat)
-                feature_type <- "genes"
+              # First, find which features are available in scores vs genes
+              available_in_scores <- if (nrow(metabolicScores(object_sub)) > 0) {
+                intersect(features, rownames(metabolicScores(object_sub)))
               } else {
-                # Check which features are missing from the subsetted object
-                missing_scores <- setdiff(features, rownames(metabolicScores(object_sub)))
-                missing_genes <- setdiff(features, rownames(object_sub))
-
-                if (length(missing_scores) < length(missing_genes)) {
-                  # More features available in metabolic scores
-                  available_features <- intersect(features, rownames(metabolicScores(object_sub)))
-                  if (length(available_features) == 0) {
-                    stop("No features found in metabolic scores")
-                  }
-                  if (verbose) {
-                    message("Using ", length(available_features), " available features from metabolic scores")
-                  }
-                  score_mat <- metabolicScores(object_sub)[available_features, , drop = FALSE]
-                  if (!is.matrix(score_mat)) {
-                    score_mat <- matrix(score_mat, nrow = 1,
-                                        dimnames = list(available_features, colnames(metabolicScores(object_sub))))
-                  }
-                  test_mat <- t(score_mat)
-                  feature_type <- "pathways"
-                  features <- available_features
-                } else {
-                  # More features available in gene expression
-                  available_features <- intersect(features, rownames(object_sub))
-                  if (length(available_features) == 0) {
-                    stop("No features found in gene expression data")
-                  }
-                  if (verbose) {
-                    message("Using ", length(available_features), " available features from gene expression")
-                  }
-                  expr_mat <- logcounts(object_sub)[available_features, , drop = FALSE]
-                  if (!is.matrix(expr_mat)) {
-                    expr_mat <- matrix(expr_mat, nrow = 1,
-                                       dimnames = list(available_features, colnames(logcounts(object_sub))))
-                  }
-                  test_mat <- t(expr_mat)
-                  feature_type <- "genes"
-                  features <- available_features
-                }
+                character(0)
               }
+              available_in_genes <- intersect(features, rownames(object_sub))
+
+              if (length(available_in_scores) >= length(available_in_genes) &&
+                  length(available_in_scores) > 0) {
+                # Use metabolic scores
+                features_to_use <- available_in_scores
+                test_mat <- t(metabolicScores(object_sub)[features_to_use, , drop = FALSE])
+                feature_type <- "pathways"
+                if (verbose && length(features_to_use) < length(features)) {
+                  message("Using ", length(features_to_use), " of ", length(features),
+                          " features from metabolic scores")
+                }
+              } else if (length(available_in_genes) > 0) {
+                # Use gene expression
+                features_to_use <- available_in_genes
+                test_mat <- t(logcounts(object_sub)[features_to_use, , drop = FALSE])
+                feature_type <- "genes"
+                if (verbose && length(features_to_use) < length(features)) {
+                  message("Using ", length(features_to_use), " of ", length(features),
+                          " features from gene expression")
+                }
+              } else {
+                stop("None of the specified features found in the data")
+              }
+
               feature_names <- colnames(test_mat)
+              features <- features_to_use  # Update features to only include available ones
             }
 
             if (verbose) {
