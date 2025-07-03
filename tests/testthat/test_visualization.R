@@ -5,7 +5,7 @@ test_that("Spatial metabolic score plotting works", {
   spm <- create_test_data()
   spm <- normalizeSpatial(spm, verbose = FALSE)
   # Use genes that actually exist in the test data
-  pathways <- list(TestPathway = c("Ndufa1", "Ndufa2", "Atp5a1"))
+  pathways <- list(TestPathway = c("Gene1", "Gene2", "Gene3"))
   spm <- calculateMetabolicScores(spm, pathways = pathways)  # REMOVED verbose = FALSE
 
   # Basic plot

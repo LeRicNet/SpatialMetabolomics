@@ -2,6 +2,14 @@
 
 # Helper function to create test data
 create_test_data <- function(n_genes = 100, n_spots = 50, n_samples = 2) {
+  # Handle edge cases
+  if (n_genes == 0 || n_spots == 0) {
+    # Create minimal valid object
+    if (n_genes == 0) n_genes <- 1
+    if (n_spots == 0) n_spots <- 1
+  }
+
+  # Create gene names that will work with test pathways
   all_gene_names <- paste0("Gene", seq_len(n_genes))
 
   counts_list <- lapply(seq_len(n_samples), function(i) {

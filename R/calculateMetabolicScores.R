@@ -41,15 +41,27 @@ setMethod("calculateMetabolicScores", "SpatialMetabolic",
                    nbin = 24,
                    ctrl = 100,
                    seed = 42,
-                   verbose = TRUE,  # ADD THIS PARAMETER
                    BPPARAM = SerialParam()) {
 
             # Check if data is normalized
-            if (all(logcounts(object) == 0)) {
+            logcounts_mat <- logcounts(object)
+
+            # Initialize logcounts if empty or all zeros
+            if (is.null(logcounts_mat) || all(logcounts_mat == 0) || length(logcounts_mat) == 0) {
               if (verbose) {
                 message("No normalized data found. Running log normalization...")
               }
-              object <- normalizeSpatial(object, verbose = verbose)
+              object <- normalizeSpatial(object, verbose = FALSE)
+              logcounts_mat <- logcounts(object)
+            }
+
+            # Double check we have proper dimensions
+            if (!is.matrix(logcounts_mat) && !is(logcounts_mat, "Matrix")) {
+              stop("logcounts must be a matrix-like object")
+            }
+
+            if (nrow(logcounts_mat) == 0 || ncol(logcounts_mat) == 0) {
+              stop("Expression matrix is empty")
             }
 
             # Get pathway gene sets
@@ -62,7 +74,7 @@ setMethod("calculateMetabolicScores", "SpatialMetabolic",
             }
 
             # Filter pathways to genes present in data
-            pathway_list <- .filterPathwayGenes(pathway_list, object, verbose = verbose)
+            pathway_list <- .filterPathwayGenes(pathway_list, object)
 
             if (length(pathway_list) == 0) {
               stop("No valid pathways after filtering for present genes")
@@ -72,6 +84,7 @@ setMethod("calculateMetabolicScores", "SpatialMetabolic",
             metabolicPathways(object) <- pathway_list
 
             # Calculate scores based on method
+            if (!exists("verbose")) verbose <- TRUE
             if (verbose) {
               message("Calculating metabolic scores using ", method, " method...")
             }
@@ -188,13 +201,40 @@ setMethod("calculateMetabolicScores", "SpatialMetabolic",
 .calculateSeuratScores <- function(object, pathway_list, nbin, ctrl, BPPARAM) {
   expr_mat <- logcounts(object)
 
-  # Calculate average expression for binning
-  # Fix: Convert sparse matrix to regular matrix for rowMeans
-  expr_mat <- as.matrix(expr_mat)
-  avg_expr <- rowMeans(expr_mat)
+  # CRITICAL FIX: Check if expr_mat is valid
+  if (!is.matrix(expr_mat) && !is(expr_mat, "Matrix")) {
+    stop("logcounts must return a matrix-like object")
+  }
+
+  # CRITICAL FIX: Ensure we have at least 2 dimensions
+  if (length(dim(expr_mat)) < 2) {
+    stop("Expression matrix must have at least 2 dimensions")
+  }
+
+  # CRITICAL FIX: If matrix is empty, return zeros
+  if (nrow(expr_mat) == 0 || ncol(expr_mat) == 0) {
+    scores <- matrix(0, nrow = length(pathway_list), ncol = ncol(object))
+    rownames(scores) <- names(pathway_list)
+    return(scores)
+  }
+
+  # CRITICAL FIX: Calculate average expression with proper matrix handling
+  if (is(expr_mat, "Matrix")) {
+    avg_expr <- Matrix::rowMeans(expr_mat)
+  } else {
+    avg_expr <- rowMeans(expr_mat)
+  }
 
   # Remove genes with no expression
   expressed_genes <- names(avg_expr)[avg_expr > 0]
+
+  # CRITICAL FIX: If no genes are expressed, return zeros
+  if (length(expressed_genes) == 0) {
+    scores <- matrix(0, nrow = length(pathway_list), ncol = ncol(expr_mat))
+    rownames(scores) <- names(pathway_list)
+    return(scores)
+  }
+
   avg_expr <- avg_expr[expressed_genes]
 
   scores <- bplapply(pathway_list, function(genes) {
@@ -204,51 +244,60 @@ setMethod("calculateMetabolicScores", "SpatialMetabolic",
       return(rep(0, ncol(expr_mat)))
     }
 
-    # Calculate pathway expression
+    # Calculate pathway expression with matrix handling
     if (length(genes_use) == 1) {
       pathway_expr <- expr_mat[genes_use, ]
+      if (is.matrix(pathway_expr)) {
+        pathway_expr <- as.vector(pathway_expr)
+      }
     } else {
-      pathway_expr <- colMeans(expr_mat[genes_use, , drop = FALSE])
-    }
-
-    # Get control genes
-    # Create bins based on average expression
-    breaks <- quantile(avg_expr, probs = seq(0, 1, length.out = nbin + 1))
-    breaks[1] <- breaks[1] - 1e-6  # Ensure lowest value is included
-    expr_bins <- cut(avg_expr, breaks = breaks, include.lowest = TRUE)
-
-    control_genes <- c()
-    for (gene in genes_use) {
-      if (gene %in% names(expr_bins)) {
-        gene_bin <- expr_bins[gene]
-        # Get all genes in the same bin
-        bin_genes <- names(expr_bins)[expr_bins == gene_bin]
-        # Remove pathway genes
-        bin_genes <- setdiff(bin_genes, genes_use)
-
-        if (length(bin_genes) >= ctrl) {
-          # Sample control genes
-          control_genes <- c(control_genes, sample(bin_genes, ctrl))
-        } else if (length(bin_genes) > 0) {
-          # Use all available genes if fewer than requested
-          control_genes <- c(control_genes, bin_genes)
-        }
+      if (is(expr_mat, "Matrix")) {
+        pathway_expr <- Matrix::colMeans(expr_mat[genes_use, , drop = FALSE])
+      } else {
+        pathway_expr <- colMeans(expr_mat[genes_use, , drop = FALSE])
       }
     }
 
-    # Remove duplicates
-    control_genes <- unique(control_genes)
+    # Get control genes only if we have enough genes for binning
+    if (length(expressed_genes) >= nbin && length(genes_use) > 0) {
+      # Create bins based on average expression
+      breaks <- quantile(avg_expr, probs = seq(0, 1, length.out = nbin + 1))
+      breaks[1] <- breaks[1] - 1e-6
+      expr_bins <- cut(avg_expr, breaks = breaks, include.lowest = TRUE)
 
-    # Calculate control expression
-    if (length(control_genes) > 1) {
-      control_expr <- colMeans(expr_mat[control_genes, , drop = FALSE])
-      score <- pathway_expr - control_expr
+      control_genes <- c()
+      for (gene in genes_use) {
+        if (gene %in% names(expr_bins)) {
+          gene_bin <- expr_bins[gene]
+          bin_genes <- names(expr_bins)[expr_bins == gene_bin]
+          bin_genes <- setdiff(bin_genes, genes_use)
+
+          if (length(bin_genes) >= ctrl) {
+            control_genes <- c(control_genes, sample(bin_genes, ctrl))
+          } else if (length(bin_genes) > 0) {
+            control_genes <- c(control_genes, bin_genes)
+          }
+        }
+      }
+
+      control_genes <- unique(control_genes)
+
+      # Calculate control expression
+      if (length(control_genes) > 1) {
+        if (is(expr_mat, "Matrix")) {
+          control_expr <- Matrix::colMeans(expr_mat[control_genes, , drop = FALSE])
+        } else {
+          control_expr <- colMeans(expr_mat[control_genes, , drop = FALSE])
+        }
+        score <- pathway_expr - control_expr
+      } else {
+        score <- pathway_expr
+      }
     } else {
-      # If no good controls, just use pathway expression
       score <- pathway_expr
     }
 
-    return(score)
+    return(as.vector(score))
   }, BPPARAM = BPPARAM)
 
   # Combine into matrix
