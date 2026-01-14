@@ -17,6 +17,7 @@
 ^CONTRIBUTING\.md$
 ^cran-comments\.md$
 ^data-raw$
+^data$
 ^Makefile$
 ^\.Rprofile$
 ^\.Renviron$

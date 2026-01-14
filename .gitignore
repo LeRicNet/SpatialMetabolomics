@@ -62,5 +62,4 @@ inst/doc
 
 # Manuscript/analysis
 /manuscript/
-/analysis/cache/
-/analysis/figures/
+/analysis/

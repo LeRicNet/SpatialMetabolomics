@@ -556,7 +556,7 @@ plotSpatialFeatures <- function(object,
   p <- ggplot(plot_data, aes(x = x, y = y, color = value)) +
     geom_point(size = point_size, shape = 16) +
     facet_wrap(~ feature + feature_type, ncol = ncol, scales = "free") +
-    coord_fixed() +
+    # coord_fixed() +
     theme_minimal() +
     theme(
       panel.grid = element_blank(),

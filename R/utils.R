@@ -37,11 +37,12 @@ normalizeSpatial <- function(object,
     # Calculate library sizes
     lib_sizes <- colSums(count_mat)
 
-    # Avoid division by zero
-    lib_sizes[lib_sizes == 0] <- 1
+    # # Avoid division by zero
+    # lib_sizes[lib_sizes == 0] <- 1
+    # NOTE: the above is unnecessary because phase 1 filters out instances of small libraries.
 
     # Normalize
-    norm_counts <- t(t(count_mat) / lib_sizes * scale_factor)
+    norm_counts <- t(t(counts(object)) / lib_sizes * scale_factor)
 
     # Log transform
     log_counts <- log1p(norm_counts)

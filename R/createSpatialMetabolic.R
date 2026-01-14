@@ -80,7 +80,7 @@ createSpatialMetabolic <- function(seurat_list,
     }
 
     # Extract counts
-    count_matrices[[i]] <- obj[["RNA"]]@counts
+    count_matrices[[i]] <- obj[["RNA"]]$counts
 
     # Extract spatial coordinates
     coords <- GetTissueCoordinates(obj)
@@ -98,23 +98,32 @@ createSpatialMetabolic <- function(seurat_list,
     colnames(count_matrices[[i]]) <- paste0("sample", i, "_", colnames(count_matrices[[i]]))
   }
 
+  message('combining all data')
+
   # Combine all data
   combined_counts <- do.call(cbind, count_matrices)
   combined_coords <- do.call(rbind, spatial_coords)
   combined_meta <- do.call(rbind, cell_metadata)
+
+  message('verifying cell order')
 
   # Ensure matching order
   cell_order <- combined_coords$cell_id
   combined_meta <- combined_meta[match(cell_order, combined_meta$cell_id), ]
   combined_counts <- combined_counts[, match(cell_order, colnames(combined_counts))]
 
+  message('building SpatialExperiment object')
+
   # Create SpatialExperiment base
   spe <- SpatialExperiment(
     assays = list(counts = combined_counts),
     colData = combined_meta,
+    checkDimnames = FALSE,
     spatialCoords = as.matrix(combined_coords[, c("x", "y")]),
     sample_id = combined_meta$sample_id
   )
+
+  message('converting to SpatialMetabolic')
 
   # Convert to SpatialMetabolic
   spm <- as(spe, "SpatialMetabolic")

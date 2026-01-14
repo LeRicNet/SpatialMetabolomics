@@ -17,7 +17,7 @@ library(viridis)
 library(BiocParallel)
 
 # Set up parallel processing
-register(MulticoreParam(workers = 4))
+register(MulticoreParam(workers = 48))
 
 # Set parameters
 data_dir <- "data/visium_hd/"
@@ -39,12 +39,15 @@ dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 message("Loading Visium HD data...")
 
 # Load Seurat objects
-seurat_list <- lapply(names(samples), function(s) {
+seurat_list <- lapply(names(samples)[1], function(s) {
   obj <- Load10X_Spatial(
     data.dir = file.path(data_dir, samples[[s]]),
     filename = "filtered_feature_bc_matrix.h5",
     bin.size = 8  # 8μm resolution for Visium HD
   )
+
+  # Adjust for 'Spatial' as 'RNA' assay
+  obj[["RNA"]] <- obj[["Spatial.008um"]]
 
   # Add metadata
   obj$sample <- s
@@ -52,7 +55,7 @@ seurat_list <- lapply(names(samples), function(s) {
 
   # Basic QC
   obj[["percent.mt"]] <- PercentageFeatureSet(obj, pattern = "^mt-")
-  obj <- subset(obj, subset = nFeature_RNA > 200 & percent.mt < 20)
+  obj <- subset(obj, subset = nFeature_Spatial.008um > 200 & percent.mt < 20)
 
   return(obj)
 })
@@ -65,6 +68,8 @@ spm <- createSpatialMetabolic(
   min_features = 200,
   min_spots = 10
 )
+
+break
 
 # Save initial object
 saveSpatialMetabolic(spm, file.path(output_dir, "spatial_metabolic_raw.rds"))
@@ -79,7 +84,7 @@ message("Performing quality control...")
 spm <- calculateQCMetrics(spm)
 
 # Create QC plots
-p_qc <- plotQCSpatial(spm, metrics = c("nCount_RNA", "nFeature_RNA", "percent_mt"))
+p_qc <- plotQCSpatial(spm, metrics = c("nCount_Spatial.008um", "nFeature_Spatial.008um", "percent_mt"))
 ggsave(file.path(output_dir, "qc_spatial.pdf"), p_qc, width = 12, height = 8)
 
 # Filter based on QC metrics (if needed)
